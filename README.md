@@ -1,5 +1,5 @@
 # AI Vision App
-## An advanced AI-powered application capable of detecting faces, recognizing objects, and performing Optical Character Recognition (OCR) with high precision.
+### An advanced AI-powered application capable of detecting faces, recognizing objects, and performing Optical Character Recognition (OCR) with high precision.
 
 ## Features
 - Face Detection & Recognition: Utilizes a two-stage approach with MTCNN for detection and VGGFace for recognition, providing reliable results even in challenging conditions.
