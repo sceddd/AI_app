@@ -1,0 +1,10 @@
+logs
+lmdb
+face_recognition/face/logs
+face_recognition/face/model_store
+face_recognition/face/weight
+face_recognition/face/util.zip
+**/__pycache__/
+*.env
+*.pyc
+**/.idea/
