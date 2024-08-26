@@ -42,8 +42,6 @@ class OCRHandler(BaseHandler):
 
     def preprocess(self, data):
         request = data[0].get('body')
-        logging.info("aaaa",request)
-
         if isinstance(request, dict):
             payload = request
         else:
@@ -66,13 +64,21 @@ class OCRHandler(BaseHandler):
                     if image.mode == 'RGBA':
                         image = image.convert('RGB')
                     ocr = self.model.get_result(image)
-                    results.append((idx, ocr))
+                    results.append({
+                        'idx': idx,
+                        'boxes': ocr['boxes'],
+                        'texts': ocr['texts']
+                    })
+
                 except Exception as e:
                     logging.error(f"OCR failed for image: {e}")
-                    results.append((idx, None))
+                    results.append({
+                        'idx': idx,
+                        'boxes': None,
+                        'texts': None
+                    })
         return results
 
     def postprocess(self, inference_output):
-        logging.info(f"Post-processing the output.{inference_output}")
         inference_output = convert_to_serializable(inference_output)
         return [inference_output]

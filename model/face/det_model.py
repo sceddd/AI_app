@@ -56,6 +56,11 @@ def convert_to_serializable(obj):
         raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
 
+def clean_json_dict(data):
+    data['boxes'] = [[[int(value) for value in box] for box in box_list] for box_list in data['boxes']]
+    return data
+
+
 logging.getLogger(__name__)
 
 
@@ -93,8 +98,8 @@ class FaceDetectionHandler(BaseHandler):
         if not os.path.exists(output_path):
             raise FileNotFoundError(f"LMDB path {output_path} does not exist.")
 
-        self.lmdb_env_read = lmdb.open(input_path, readonly=False, lock=False)
-        self.lmdb_env_write = lmdb.open(output_path, readonly=False, lock=False)
+        self.lmdb_env_read = lmdb.open(input_path, readonly=True, lock=False)
+        self.lmdb_env_write = lmdb.open(output_path,readonly=False, lock=False, map_size=1099511627776)
 
         return payload.get("idx")
 
@@ -120,12 +125,14 @@ class FaceDetectionHandler(BaseHandler):
     def postprocess(self, data):
         batch_results = []
         logging.info(f"Postprocessing {data} images")
-
         with self.lmdb_env_write.begin(write=True) as txn:
             for item in data:
                 img_idx, image, face_datas = item
 
-                img_results = []
+                img_results = {
+                    'boxes': [],
+                    'face_key': []
+                }
                 boxes, confidences, landmarks = face_datas
 
                 if boxes is None:
@@ -135,14 +142,15 @@ class FaceDetectionHandler(BaseHandler):
                         if conf > 0.9:
                             new_pt = calculate_flm_on_cropped_img(box, lm, imgcr_size=160)
                             face = extract_face(image, box)
-                            face_key = str(ObjectId())
 
                             face_data = {
                                 "face": face,
                                 "new_pt": new_pt
                             }
+                            face_key = str(ObjectId())
                             txn.put(face_key.encode('utf-8'), pickle.dumps(face_data))
-                            img_results.append(face_key)
+                            img_results['face_key'].append(face_key)
+                            img_results['boxes'].append([int(coord) for coord in box])
                         else:
                             logging.info(f"Face detection confidence too low: {conf}")
                 batch_results.append(img_results)
@@ -151,7 +159,16 @@ class FaceDetectionHandler(BaseHandler):
             "batch_results": batch_results
         }
         result = convert_to_serializable(result)
+
         return [result]
+
+    def process_embeddings(self, _all_embeddings, transform_only=True):
+        try:
+            combined_embeds = torch.cat(_all_embeddings)
+            dr_embeds = self.model.to_latent_space(combined_embeds.cpu().numpy(), transform_only)
+            labels = self.model.to_cluster(dr_embeds)
+        except Exception as e:
+            print(f'Error processing embeddings: {e}')
 
 
 _service = FaceDetectionHandler()

@@ -77,7 +77,7 @@ class FaceRecognitionHandler(BaseHandler):
     def inference(self, batch, *args, **kwargs):
         results = {}
         for image in batch:
-            for faces_idx in image:
+            for faces_idx in image['face_key']:
                 try:
                     if faces_idx is None:
                         results[faces_idx] = None

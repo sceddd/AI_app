@@ -6,7 +6,7 @@ from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
 from djongo import models
 
-from .app_models.photos import Photo
+from .app_models.photos import FacePhoto, OCRPhoto, ObjectDetPhoto
 
 
 class CustomUserManager(BaseUserManager):
@@ -33,7 +33,9 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     is_active = models.BooleanField(default=True)
     date_joined = models.DateTimeField(default=timezone.now)
 
-    images = models.ArrayReferenceField(to=Photo, on_delete=models.CASCADE)
+    ocr_image_ids = models.JSONField(models.CharField(max_length=24), default=list)
+    face_image_ids = models.JSONField(models.CharField(max_length=24), default=list)
+    ob_det_image_ids = models.JSONField(models.CharField(max_length=24), default=list)
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []
@@ -42,3 +44,21 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.email
+
+    def image_add(self, image, photo_type):
+        if photo_type == 'face':
+            self.face_image_ids = image
+        elif photo_type == 'ocr':
+            self.ocr_image_ids = image
+        elif photo_type == 'ob_det':
+            self.ob_det_image_ids = image
+        self.save()
+
+    def get_image(self, photo_type):
+        if photo_type == 'face':
+            return self.face_image_ids
+        elif photo_type == 'ocr':
+            return self.ocr_image_ids
+        elif photo_type == 'ob_det':
+            return self.ob_det_image_ids
+        raise ValueError(f"Unknown photo type: {photo_type}")

@@ -9,7 +9,10 @@ from torch.autograd import Variable
 from .detect_utils import *
 from .downloads import download_weights
 from .project_utils import create_module
-
+import umap
+import numpy as np
+from sklearn.manifold import TSNE
+from sklearn.decomposition import PCA
 logging.getLogger(__name__)
 
 
@@ -20,9 +23,16 @@ class FaceRecognition:
 
         self.img_size = cfg['img_size']
         self.meta = cfg['meta']
-
+        self.function = cfg['function']
+        support_dr_function = ["umap", "tsne", "pca"]
+        if self.function not in support_dr_function:
+            raise ValueError(f"Unsupported dimension reduction function {self.function}")
+        support_cl_function = ["kmeans", "dbscan"]
+        if self.function not in support_cl_function:
+            raise ValueError(f"Unsupported clustering function {self.function}")
         logging.info(f'Using {cfg["function"]} model for recognition')
-
+        self.dr_alg = create_module(cfg['dr_algorithm']['function'])(**cfg['dr_algorithm']['param'])
+        self.cluster_alg = create_module(cfg['cl_algorithm']['function'])(**cfg['cl_algorithm']['param'])
         weight_path = cfg['weight_path']
         if dowload_weight:
             download_weights(id_or_url='https://www.robots.ox.ac.uk/~albanie/models/pytorch-mcn/vgg_face_dag.pth',
@@ -39,27 +49,13 @@ class FaceRecognition:
 
     def embed(self, img, landmark):
 
-        face2numpy = lambda x: np.array(x.permute(1, 2, 0)).astype(np.uint8)
-        img_alg, landmark = process((face2numpy(img), landmark))
+        img_alg, landmark = process((np.array(img.permute(1, 2, 0)).astype(np.uint8), landmark))
 
-        # Create a list of images including the flipped version
-        imglist = [
-            img_alg,
-            img_alg.transpose(Image.FLIP_LEFT_RIGHT),
-        ]
+        img_alg = compose_transforms(meta=self.meta, center_crop=False)(img_alg)
 
-        # Apply preprocessing transformations
-        preproc_transforms = compose_transforms(
-            meta=self.meta,
-            center_crop=False
-        )
-        for i in range(len(imglist)):
-            imglist[i] = preproc_transforms(imglist[i])
-
-        # Stack images and convert to torch Variable
-        ims = torch.stack(imglist, dim=0)
-        ims = Variable(ims).cuda()
+        ims = Variable(torch.unsqueeze(img_alg, dim=0)).cuda()
         features = extract_features(self.model, ims)
+
         return features
 
     def recognition(self, input_recog):
@@ -68,9 +64,16 @@ class FaceRecognition:
         features1 = self.embed(img1[0], img1[1])
         features2 = self.embed(img2[0], img2[1])
 
-        f1, f2 = features1[0].squeeze(), features2[0].squeeze()
+        f1, f2 = features1.squeeze(), features2.squeeze()
         cos = f1.dot(f2) / (f1.norm() * f2.norm() + 1e-5)
         return cos
+
+    def to_latent_space(self, feature, transform_only=True):
+        return self.dr_alg.transform(feature) if transform_only else self.dr_alg.fit_transform(feature)
+
+    def to_cluster(self, embeddings):
+        labels = self.cluster_alg.fit_predict(embeddings)
+        return labels
 
 
 if __name__ == '__main__':

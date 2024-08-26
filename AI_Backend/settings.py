@@ -9,13 +9,15 @@ https://docs.djangoproject.com/en/5.0/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.0/ref/settings/
 """
-
+import logging
+from datetime import timedelta
 from pathlib import Path
 import os
 
 import lmdb
 from dotenv import load_dotenv
 import djongo
+
 from kombu import Queue
 from pymongo import MongoClient
 import redis
@@ -33,9 +35,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-2n)$#(4+$^%kfal^1%f1(a7bvir3*$z23ay!&s6uhupv#-2w0s'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
-ALLOWED_HOSTS = ['10.0.2.2']
+ALLOWED_HOSTS = []
 
 # Application definition
 
@@ -48,8 +50,8 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'account',
     'rest_framework',
-    'face_recognition',
     'rest_framework_simplejwt',
+    'django_extensions'
 ]
 
 MIDDLEWARE = [
@@ -113,6 +115,7 @@ MONGO_CLIENT = MongoClient(
     authMechanism=os.getenv('AUTHMECHANISM')
 )
 
+IMAGE_DB = MONGO_CLIENT['face_tables']
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
 
@@ -175,13 +178,22 @@ CELERY_TIMEZONE = 'UTC'
 
 CELERYD_LOG_FILE = './logs/celery.log'
 CELERYD_LOG_LEVEL = 'DEBUG'
+CELERY_TASK_QUEUES = (
+    Queue('image_upload', routing_key='image.upload'),
+    Queue('image_processing', routing_key='image.process'),
+    Queue('write_cache_and_process', routing_key='image.cache'),
+)
 
-
+CELERY_TASK_ROUTES = {
+    'account.tasks.batch_upload_images_to_mongodb': {'queue': 'image_upload'},
+    'account.tasks.process_batch': {'queue': 'image_processing'},
+    'account.tasks.write_cache_and_process': {'queue': 'write_cache_and_process'}
+}
 # LMDB settings
 LMDB_PATH = os.path.join(BASE_DIR, 'lmdb')
 LMDB_BATCH_SIZE = 150
 LMDB_PATH_FACE = os.path.join(LMDB_PATH,'face', 'det')
-
+LMDB_LIMIT = 1099511627776
 os.makedirs(LMDB_PATH, exist_ok=True)
 os.makedirs(LMDB_PATH_FACE, exist_ok=True)
 
@@ -191,3 +203,84 @@ TS_PORT = '8080'
 
 TORCHSERVE_URI_DET = f'http://{TS_HOST}:{TS_PORT}/predictions/facedet'
 TORCHSERVE_URI_REG = f'http://{TS_HOST}:{TS_PORT}/predictions/facereg'
+
+TORCHSERVE_URI_OCR = f'http://{TS_HOST}:{TS_PORT}/predictions/ocr'
+TORCHSERVE_URI_OD = f'http://{TS_HOST}:{TS_PORT}/predictions/obdet'
+
+
+class SpecificTextFilter(logging.Filter):
+    def __init__(self, max_length=100):
+        super().__init__()
+        self.max_length = max_length
+
+    def filter(self, record):
+
+        if "first seen with mtime" in record.msg:
+            return False
+
+        if len(record.msg) > self.max_length:
+
+            record.msg = record.msg[:self.max_length] + '...'
+
+        return True
+
+
+LOGGING = {
+    "version": 1,  # the dictConfig format version
+    "disable_existing_loggers": False,  # retain the default loggers
+    "formatters": {
+        "simple": {
+            "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        },
+    },
+    "handlers": {
+        "django_file": {
+            "level": "DEBUG",
+            "class": "logging.FileHandler",
+            "filename": "./logs/debug.log",
+            "filters": ["specific_text_filter"],
+        },
+        "celery_file": {
+            "level": "DEBUG",
+            "class": "logging.FileHandler",
+            "filename": "./logs/celery.log",
+            "filters": ["specific_text_filter"],
+        },
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["django_file"],
+            "level": "DEBUG",
+            "propagate": True,
+        },
+        "celery":{
+            "handlers": ["celery_file"],
+            "level": "DEBUG",
+            "propagate": True,
+        }
+    },
+    "filters": {
+        "specific_text_filter": {
+            "()": SpecificTextFilter,
+            "max_length": 100,  # Đặt độ dài tối đa cho log
+        },
+    },
+}
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=24),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': False,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY,
+    'VERIFYING_KEY': None,
+    'AUDIENCE': None,
+    'ISSUER': None,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+    'TOKEN_TYPE_CLAIM': 'token_type',
+    'JTI_CLAIM': 'jti',
+}

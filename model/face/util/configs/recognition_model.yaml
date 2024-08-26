@@ -2,7 +2,20 @@ VGGFace:
     weight_path: './vgg_face_dag.pth'
     img_size: 160,160
     function: .model.vgg, vgg_face_dag
+    dr_function: umap
     meta:
         imageSize: [224, 224, 3]
         mean: [129.186279296875, 104.76238250732422, 93.59396362304688]
         std: [1, 1, 1]
+
+    UMAP:
+        n_neighbors: 15
+        min_dist: 0.1
+        random_state: 42
+        n_components: 2
+
+    TSNE:
+        n_components: 2
+        random_state: 42
+
+    PCA:

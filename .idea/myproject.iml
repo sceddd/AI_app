@@ -14,11 +14,11 @@
   </component>
   <component name="NewModuleRootManager">
     <content url="file://$MODULE_DIR$">
-      <excludeFolder url="file://$MODULE_DIR$/face_recognition/face/logs" />
-      <excludeFolder url="file://$MODULE_DIR$/face_recognition/face/model_store" />
-      <excludeFolder url="file://$MODULE_DIR$/face_recognition/face/weight" />
       <excludeFolder url="file://$MODULE_DIR$/lmdb" />
       <excludeFolder url="file://$MODULE_DIR$/logs" />
+      <excludeFolder url="file://$MODULE_DIR$/model/face/logs" />
+      <excludeFolder url="file://$MODULE_DIR$/model/face/weight" />
+      <excludeFolder url="file://$MODULE_DIR$/model/model_store" />
     </content>
     <orderEntry type="jdk" jdkName="arcface (2)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />

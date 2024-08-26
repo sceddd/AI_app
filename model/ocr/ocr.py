@@ -15,7 +15,7 @@ class MyOCR(OCR):
         all_img_crop = det_result['boundary_result']
         boxes_coordinate = det_result['box_coordinate']
         if len(all_img_crop) == 0:
-            result = 'khong co text trong anh'
+            result = 'No text detected'
             return result
         all_img_pil = []
         for idx, img_crop in enumerate(all_img_crop):

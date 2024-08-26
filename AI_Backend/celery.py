@@ -4,9 +4,7 @@ from celery import Celery
 from django.conf import settings
 import logging
 
-from kombu import Queue
-
-# set the default Django settings module for the 'celery' program.
+# Set the default Django settings module for the 'celery' program.
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'AI_Backend.settings')
 
 app = Celery('AI_Backend')
@@ -19,24 +17,16 @@ app.config_from_object('django.conf:settings', namespace='CELERY')
 
 # Load task modules from all registered Django app configs.
 app.autodiscover_tasks(lambda: settings.INSTALLED_APPS)
-app.conf.task_queues = {
-    Queue('image_upload', routing_key='image.upload'),
-    Queue('image_processing', routing_key='image.process')
-}
 
-app.conf.task_routes = {
-    'your_project.tasks.batch_upload_images_to_mongodb': {'queue': 'image_upload'},
-    'your_project.tasks.process_image_data': {'queue': 'image_processing'}
-}
-logger = logging.getLogger('celery')
-handler = logging.FileHandler('./logs/celery.log')
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# Set Celery task queues and routes from Django settings
+app.conf.task_queues = settings.CELERY_TASK_QUEUES
+app.conf.task_routes = settings.CELERY_TASK_ROUTES
 
-handler.setFormatter(formatter)
-logger.addHandler(handler)
-logger.setLevel(logging.DEBUG)
+# Ensure Celery uses the logging configuration from Django settings
+# No need to define the logger manually here as Celery will use Django's logging configuration
 
 
 @app.task(bind=True)
 def debug_task(self):
-    print(f'Request: {self.request!r}')
+    logger = logging.getLogger("celery")
+    logger.debug(f'Request: {self.request!r}')
