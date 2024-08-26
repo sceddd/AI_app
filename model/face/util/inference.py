@@ -9,7 +9,6 @@ from torch.autograd import Variable
 from .detect_utils import *
 from .downloads import download_weights
 from .project_utils import create_module
-from .visualize import *
 
 logging.getLogger(__name__)
 
@@ -83,5 +82,4 @@ if __name__ == '__main__':
     img = cv2.imread('/face_test/abc/0a0d7a87378422z3.jpg')
     torch.cuda.empty_cache()
     boxes, _ = model.detect(img)
-    draw_bounding_boxes_opencv(img, boxes, 'output.jpg')
     cv2.imwrite('output.jpg', img)

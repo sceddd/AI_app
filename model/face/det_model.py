@@ -130,7 +130,6 @@ class FaceDetectionHandler(BaseHandler):
 
                 if boxes is None:
                     logging.info(f"No faces detected in image with idx {img_idx}.")
-                    img_results.append(None)
                 else:
                     for face_idx, (box, conf, lm) in enumerate(zip(boxes, confidences, landmarks)):
                         if conf > 0.9:
@@ -144,16 +143,15 @@ class FaceDetectionHandler(BaseHandler):
                             }
                             txn.put(face_key.encode('utf-8'), pickle.dumps(face_data))
                             img_results.append(face_key)
-
                         else:
                             logging.info(f"Face detection confidence too low: {conf}")
                 batch_results.append(img_results)
         logging.info(f"Postprocessing complete. Returning {batch_results} results.")
-        result_with_lmdb_path = {
+        result = {
             "batch_results": batch_results
         }
-        result_with_lmdb_path = convert_to_serializable(result_with_lmdb_path)
-        return [result_with_lmdb_path]
+        result = convert_to_serializable(result)
+        return [result]
 
 
 _service = FaceDetectionHandler()
