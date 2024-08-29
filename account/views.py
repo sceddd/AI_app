@@ -4,7 +4,6 @@ import uuid
 from celery.result import AsyncResult
 from django.conf import settings
 from django.contrib.auth import login, authenticate, get_user_model
-from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
@@ -12,10 +11,11 @@ from rest_framework.decorators import permission_classes, api_view
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .app_models.photos import FacePhoto, OCRPhoto, get_photo_class, AbstractPhoto
+from .app_models.photos import get_photo_class, AbstractPhoto
 from .forms.login_form import CustomAuthenticationForm
 from .forms.register_form import CustomUserCreationForm
-from .tasks import batch_upload_images_to_mongodb
+from .project_utils._utils import chunked_iterable
+from .tasks.tasks import batch_upload_images_to_mongodb
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -47,8 +47,10 @@ def user_photos(request):
         photo_type = request.GET.get('type','').lower()
         user = request.user
         photos_id = user.get_image(photo_type)
+        print(photos_id)
         photo_class = get_photo(photo_type)
         photos = photo_class.objects.filter(image_id__in=photos_id)
+        print(photos)
         return JsonResponse({'photos': [photo.to_dict() for photo in photos]}, status=200)
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
@@ -58,7 +60,6 @@ def user_photos(request):
 @csrf_exempt
 def upload(request):
     if request.method == 'POST' and 'files' in request.FILES:
-        img_ids = []
         user = request.user
         redis_client = settings.REDIS_CLIENT
         batch_size = settings.LMDB_BATCH_SIZE
@@ -66,22 +67,21 @@ def upload(request):
         photo_type = request.POST.get('type', '').lower()
         photo_class = get_photo(photo_type)
         files = request.FILES.getlist('files')
-        for idx, image in enumerate(files):
-            image_data = image.read()
-            image_id = 'img_{}'.format(uuid.uuid1())
-            redis_client.set(image_id, image_data)
+        all_img_ids = []
+        for file_chunk in chunked_iterable(files, batch_size):
+            img_ids = []
+            for image in file_chunk:
+                image_data = image.read()
+                image_id = 'img_{}'.format(uuid.uuid1())
+                redis_client.set(image_id, image_data)
 
-            photo = photo_class(image_id=image_id, status=AbstractPhoto.Status.UPLOADED)
-            photo.save()
+                photo = photo_class(image_id=image_id, status=AbstractPhoto.Status.UPLOADED)
+                photo.save()
 
-            img_ids.append(image_id)
-            if idx % batch_size == 0:
-                batch_upload_images_to_mongodb.apply_async(args=[img_ids,photo_type], queue='image_upload')
-                img_ids = []
-
-        user.image_add(image=img_ids,photo_type=photo_type)
-        if img_ids:
+                img_ids.append(image_id)
             batch_upload_images_to_mongodb.apply_async(args=[img_ids,photo_type], queue='image_upload')
+            all_img_ids.extend(img_ids)
+        user.image_add(image=all_img_ids,photo_type=photo_type)
 
         return JsonResponse({'message': 'Tasks created for all batches'}, status=202)
     return JsonResponse({'error': 'No image file found'}, status=400)
@@ -104,6 +104,10 @@ def login_user(request):
         else:
             return JsonResponse({"errors": form.errors}, status=400)
     return JsonResponse({"error": "Only POST method is allowed"}, status=405)
+
+
+def logout_user(request):
+    return JsonResponse({"message": "User logged out successfully"}, status=200)
 
 
 @csrf_exempt
@@ -151,3 +155,10 @@ def get_image_from_gridfs(request, image_id):
         return HttpResponse(f"Error retrieving image: {str(e)}", status=500)
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_similar_faces(request):
+    photo_check = request.GET.get('type', '').lower() == 'face'
+    if not photo_check:
+        return JsonResponse({'error': 'Invalid photo type'}, status=400)
+    photo_class = get_photo_class('face')

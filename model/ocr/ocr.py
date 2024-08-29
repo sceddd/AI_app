@@ -18,9 +18,11 @@ class MyOCR(OCR):
             result = 'No text detected'
             return result
         all_img_pil = []
+
         for idx, img_crop in enumerate(all_img_crop):
             img_pil = Image.fromarray(img_crop.astype('uint8'), 'RGB')
             all_img_pil.append(img_pil)
+
         result = self.recognition.recognize(all_img_pil)
         infos = dict()
         infos['boxes'] = boxes_coordinate
@@ -33,8 +35,6 @@ if __name__ == '__main__':
 
     image = Image.open('/home/victor-ho/work/school/final/TextDetection/model/DBNet_Reg/datasets/train_data/train_imgs/img_1.jpg')  # ..is the path of image
     result,img_wb,ls_crop = model.get_result(image)
-    print(result)
-    print(result['texts'])
     Image.fromarray(img_wb).show('detected_image')
     num_images = 5
     print(len(ls_crop))

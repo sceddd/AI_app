@@ -2,17 +2,13 @@ import logging
 import os.path
 
 import torch
-from PIL import Image
 from facenet_pytorch import MTCNN
 from torch.autograd import Variable
 
 from .detect_utils import *
 from .downloads import download_weights
 from .project_utils import create_module
-import umap
-import numpy as np
-from sklearn.manifold import TSNE
-from sklearn.decomposition import PCA
+
 logging.getLogger(__name__)
 
 
@@ -20,19 +16,10 @@ class FaceRecognition:
     def __init__(self, cfg, device,dowload_weight=False):
         self.cfg = cfg
         self.device = device
-
         self.img_size = cfg['img_size']
         self.meta = cfg['meta']
         self.function = cfg['function']
-        support_dr_function = ["umap", "tsne", "pca"]
-        if self.function not in support_dr_function:
-            raise ValueError(f"Unsupported dimension reduction function {self.function}")
-        support_cl_function = ["kmeans", "dbscan"]
-        if self.function not in support_cl_function:
-            raise ValueError(f"Unsupported clustering function {self.function}")
         logging.info(f'Using {cfg["function"]} model for recognition')
-        self.dr_alg = create_module(cfg['dr_algorithm']['function'])(**cfg['dr_algorithm']['param'])
-        self.cluster_alg = create_module(cfg['cl_algorithm']['function'])(**cfg['cl_algorithm']['param'])
         weight_path = cfg['weight_path']
         if dowload_weight:
             download_weights(id_or_url='https://www.robots.ox.ac.uk/~albanie/models/pytorch-mcn/vgg_face_dag.pth',
@@ -67,13 +54,6 @@ class FaceRecognition:
         f1, f2 = features1.squeeze(), features2.squeeze()
         cos = f1.dot(f2) / (f1.norm() * f2.norm() + 1e-5)
         return cos
-
-    def to_latent_space(self, feature, transform_only=True):
-        return self.dr_alg.transform(feature) if transform_only else self.dr_alg.fit_transform(feature)
-
-    def to_cluster(self, embeddings):
-        labels = self.cluster_alg.fit_predict(embeddings)
-        return labels
 
 
 if __name__ == '__main__':

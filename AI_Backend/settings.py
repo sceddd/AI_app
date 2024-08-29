@@ -9,18 +9,22 @@ https://docs.djangoproject.com/en/5.0/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.0/ref/settings/
 """
-import logging
+import logging.config
 from datetime import timedelta
 from pathlib import Path
 import os
-
+import gdown
 import lmdb
+from djongo.exceptions import print_warn
 from dotenv import load_dotenv
 import djongo
 
 from kombu import Queue
 from pymongo import MongoClient
 import redis
+import warnings
+
+from account.app_models.cluster_models import DimReductionAndClustering
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 load_dotenv('key.env')
@@ -85,8 +89,7 @@ TEMPLATES = [
 WSGI_APPLICATION = 'AI_Backend.wsgi.application'
 
 AUTH_USER_MODEL = 'account.CustomUser'
-# Database
-# https://docs.djangoproject.com/en/5.0/ref/settings/#databases
+
 DATABASES = {
     'default': {
         'ENGINE': 'djongo',
@@ -225,6 +228,32 @@ class SpecificTextFilter(logging.Filter):
         return True
 
 
+UMAP_DIR = os.path.join(BASE_DIR, 'account', 'umap_weight')
+UMAP_WEIGHT_PATH = os.path.join(UMAP_DIR, 'umap_weight.pkl')
+if not os.path.exists(UMAP_WEIGHT_PATH):
+    print(f"WARNING: UMAP weights not found at {UMAP_WEIGHT_PATH}.\n"
+                  f"run python manage.py download_weight command first")
+
+DR_CFG = {
+        'param': {
+            'n_neighbors': 20,
+            'min_dist': 0.2,
+            'n_components': 3,
+            'metric': 'euclidean'
+        },
+        'function': 'umap, UMAP'
+    }
+CL_CFG = {
+    'param': {
+        'eps': 0.5,
+        'min_samples': 4,
+        'metric': 'euclidean'
+    },
+    'function': 'sklearn.cluster, DBSCAN'
+}
+
+CLUSTER_MODEL = DimReductionAndClustering(path=UMAP_WEIGHT_PATH,dr_cfg=DR_CFG,cl_cfg=CL_CFG)
+
 LOGGING = {
     "version": 1,  # the dictConfig format version
     "disable_existing_loggers": False,  # retain the default loggers
@@ -266,6 +295,8 @@ LOGGING = {
         },
     },
 }
+
+logging.config.dictConfig(LOGGING)
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(hours=24),

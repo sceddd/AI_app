@@ -77,6 +77,7 @@ class OCRHandler(BaseHandler):
                         'boxes': None,
                         'texts': None
                     })
+        logging.info(f"Extracted texts :{ocr['texts']} ")
         return results
 
     def postprocess(self, inference_output):

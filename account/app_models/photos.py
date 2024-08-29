@@ -36,11 +36,17 @@ class AbstractPhoto(models.Model):
         if not self.default_collection:
             raise ValueError('default_collection must be set')
 
-    def __str__(self):
-        return self.image_id
+    @classmethod
+    def get_all_photos(cls):
+        return cls.objects.all()
 
     def to_dict(self):
-        raise NotImplementedError
+        return {
+            'status': self.status,
+            'image_id': self.image_id,
+            'created_at': self.created_at.isoformat(),  # Convert datetime to string in ISO format
+            'bounding_boxes': self.bounding_boxes,
+        }
 
     def save_image_to_gridfs(self, image_file):
         file_id = GridFS(IMAGE_DB, collection=self.default_collection).put(image_file, filename=self.image_id)
@@ -70,6 +76,12 @@ class FaceEmbedding(models.Model):
     def get_image(self):
         return self.db.get(self.gridfs_id).read()
 
+    def get_all_photos(self):
+        db = settings.MONGO_CLIENT[settings.DATABASES['default']['NAME']]
+        collection = db.get_collection()
+        photos = collection.find()
+        return list(photos)
+
     def to_dict(self):
         return {
             'face_id': self.face_id,
@@ -92,10 +104,7 @@ class FacePhoto(AbstractPhoto):
                 except FaceEmbedding.DoesNotExist:
                     faces_info.append({'face_id': face_id, 'error': 'FaceEmbedding not found'})
         return {
-            'status': self.status,
-            'image_id': self.image_id,
-            'created_at': self.created_at.isoformat(),  # Convert datetime to string in ISO format
-            'boxes': self.bounding_boxes,
+            **super().to_dict(),
             'faces': faces_info if get_faces_info else self.faces,
         }
 
@@ -106,10 +115,7 @@ class OCRPhoto(AbstractPhoto):
 
     def to_dict(self):
         return {
-            'status': self.status,
-            'image_id': self.image_id,
-            'created_at': self.created_at.isoformat(),  # Convert datetime to string in ISO format
-            'boxes': self.bounding_boxes,
+            **super().to_dict(),
             'texts': self.texts,
         }
 
@@ -120,10 +126,7 @@ class ObjectDetPhoto(AbstractPhoto):
 
     def to_dict(self):
         return {
-            'status': self.status,
-            'image_id': self.image_id,
-            'created_at': self.created_at.isoformat(),  # Convert datetime to string in ISO format
-            'boxes': self.bounding_boxes,
+            **super().to_dict(),
             'objects_det': self.objects_det,
         }
 
