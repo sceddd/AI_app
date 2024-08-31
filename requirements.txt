@@ -13,7 +13,7 @@ python-dotenv==1.0.1
 PyYAML==6.0.2
 redis==5.0.8
 Requests==2.32.3
-rest_framework_simplejwt==0.0.2
+djangorestframework-simplejwt
 seaborn==0.13.2
 torch==2.2.0
 torchvision==0.17.0
@@ -21,3 +21,4 @@ ts==0.5.1
 ultocr==0.3.1
 ultralytics==8.2.83
 wheel==0.44.0
+umap-learn==0.5.6

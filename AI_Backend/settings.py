@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 import logging.config
 import os
+import sys
 from datetime import timedelta
 from pathlib import Path
 
@@ -31,7 +32,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-2n)$#(4+$^%kfal^1%f1(a7bvir3*$z23ay!&s6uhupv#-2w0s'
+SECRET_KEY = os.getenv('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -50,7 +51,6 @@ INSTALLED_APPS = [
     'account',
     'rest_framework',
     'rest_framework_simplejwt',
-    'django_extensions'
 ]
 
 MIDDLEWARE = [
@@ -187,6 +187,7 @@ CELERY_TASK_ROUTES = {
     'account.tasks.process_batch': {'queue': 'image_processing'},
     'account.tasks.write_cache_and_process': {'queue': 'write_cache_and_process'}
 }
+
 # LMDB settings
 LMDB_PATH = os.path.join(BASE_DIR, 'lmdb')
 LMDB_BATCH_SIZE = 150
@@ -196,8 +197,8 @@ os.makedirs(LMDB_PATH, exist_ok=True)
 os.makedirs(LMDB_PATH_FACE, exist_ok=True)
 
 # TorchServe settings
-TS_HOST = os.getenv('TS_HOST')
-TS_PORT = os.getenv('TS_PORT')
+TS_HOST = 'localhost'
+TS_PORT = 8080
 
 TORCHSERVE_URI_DET = f'http://{TS_HOST}:{TS_PORT}/predictions/facedet'
 TORCHSERVE_URI_REG = f'http://{TS_HOST}:{TS_PORT}/predictions/facereg'
@@ -246,9 +247,11 @@ CL_CFG = {
     },
     'function': 'sklearn.cluster, DBSCAN'
 }
+current_command = sys.argv[1] if len(sys.argv) > 1 else None
+CLUSTER_MODEL = None if current_command == 'download_weight' else DimReductionAndClustering(path=UMAP_WEIGHT_PATH,dr_cfg=DR_CFG,cl_cfg=CL_CFG)
 
-CLUSTER_MODEL = DimReductionAndClustering(path=UMAP_WEIGHT_PATH,dr_cfg=DR_CFG,cl_cfg=CL_CFG)
-
+LOG_DIR = os.path.join(BASE_DIR, 'logs')
+os.makedirs(LOG_DIR, exist_ok=True)
 LOGGING = {
     "version": 1,  # the dictConfig format version
     "disable_existing_loggers": False,  # retain the default loggers
@@ -286,7 +289,7 @@ LOGGING = {
     "filters": {
         "specific_text_filter": {
             "()": SpecificTextFilter,
-            "max_length": 100,  # Đặt độ dài tối đa cho log
+            "max_length": 100,
         },
     },
 }
