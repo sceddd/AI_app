@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  db:
+    image: mongo
+    container_name: mongodb
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${PASSWORD}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+  web:
+    build: .
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=True
+      - MONGO_URI=${MONGO_URI}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - TS_HOST=${TS_HOST}
+      - TS_PORT=${TS_PORT}
+    depends_on:
+      - mongo
+      - redis
+      - torchserve
+
+  redis:
+    image: "redis:alpine"
+    ports:
+      - "6379:6379"
+
+  torchserve:
+    image: "pytorch/torchserve:latest"
+    command: ["torchserve", "--start", "--model-store", "/app/model_store", "--ncs"]
+    volumes:
+      - ./model/model_store:/app/model_store
+    ports:
+      - "8080:8080"
+

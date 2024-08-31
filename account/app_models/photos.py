@@ -76,12 +76,6 @@ class FaceEmbedding(models.Model):
     def get_image(self):
         return self.db.get(self.gridfs_id).read()
 
-    def get_all_photos(self):
-        db = settings.MONGO_CLIENT[settings.DATABASES['default']['NAME']]
-        collection = db.get_collection()
-        photos = collection.find()
-        return list(photos)
-
     def to_dict(self):
         return {
             'face_id': self.face_id,

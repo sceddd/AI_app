@@ -1,6 +1,7 @@
 import logging
 import uuid
 
+from celery import chain
 from celery.result import AsyncResult
 from django.conf import settings
 from django.contrib.auth import login, authenticate, get_user_model
@@ -11,11 +12,11 @@ from rest_framework.decorators import permission_classes, api_view
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .app_models.photos import get_photo_class, AbstractPhoto
+from .app_models.photos import get_photo_class, AbstractPhoto, FacePhoto
 from .forms.login_form import CustomAuthenticationForm
 from .forms.register_form import CustomUserCreationForm
 from .project_utils._utils import chunked_iterable
-from .tasks.tasks import batch_upload_images_to_mongodb
+from .tasks.tasks import batch_upload_images_to_mongodb, cluster_face
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -47,12 +48,45 @@ def user_photos(request):
         photo_type = request.GET.get('type','').lower()
         user = request.user
         photos_id = user.get_image(photo_type)
-        print(photos_id)
         photo_class = get_photo(photo_type)
         photos = photo_class.objects.filter(image_id__in=photos_id)
-        print(photos)
         return JsonResponse({'photos': [photo.to_dict() for photo in photos]}, status=200)
     return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@csrf_exempt
+def get_similar_faces(request):
+    photo_check = request.POST.get('type', '').lower() == 'face'
+    if not photo_check:
+        return JsonResponse({'error': 'Invalid photo type'}, status=400)
+    user = request.user
+
+    new_photo =  request.FILES['f_image']
+    face_id = new_img_upload(new_photo,'face')
+    user.image_add(images=[face_id],photo_type='face')
+
+    photos_id = user.get_image('face')
+    photo_class = get_photo('face')
+    photos = photo_class.objects.filter(image_id__in=photos_id)
+    faces_embed = [photo.faces for photo in photos]
+    chain(
+        batch_upload_images_to_mongodb.s([face_id], 'faces') |
+        cluster_face().s(faces_embed, face_id)
+    )
+    return JsonResponse({'message': 'Loading...'}, status=202)
+
+
+def new_img_upload(image,photo_type):
+    redis_client = settings.REDIS_CLIENT
+    image_data = image.read()
+    image_id = 'img_{}'.format(uuid.uuid1())
+    redis_client.set(image_id, image_data)
+    photo_class = get_photo(photo_type)
+    photo = photo_class(image_id=image_id, status=AbstractPhoto.Status.UPLOADED)
+    photo.save()
+    return image_id
 
 
 @api_view(['POST'])
@@ -61,27 +95,20 @@ def user_photos(request):
 def upload(request):
     if request.method == 'POST' and 'files' in request.FILES:
         user = request.user
-        redis_client = settings.REDIS_CLIENT
+
         batch_size = settings.LMDB_BATCH_SIZE
 
         photo_type = request.POST.get('type', '').lower()
-        photo_class = get_photo(photo_type)
         files = request.FILES.getlist('files')
         all_img_ids = []
         for file_chunk in chunked_iterable(files, batch_size):
             img_ids = []
             for image in file_chunk:
-                image_data = image.read()
-                image_id = 'img_{}'.format(uuid.uuid1())
-                redis_client.set(image_id, image_data)
-
-                photo = photo_class(image_id=image_id, status=AbstractPhoto.Status.UPLOADED)
-                photo.save()
-
+                image_id = new_img_upload(image,photo_type)
                 img_ids.append(image_id)
             batch_upload_images_to_mongodb.apply_async(args=[img_ids,photo_type], queue='image_upload')
             all_img_ids.extend(img_ids)
-        user.image_add(image=all_img_ids,photo_type=photo_type)
+        user.image_add(images=all_img_ids,photo_type=photo_type)
 
         return JsonResponse({'message': 'Tasks created for all batches'}, status=202)
     return JsonResponse({'error': 'No image file found'}, status=400)
@@ -134,7 +161,6 @@ def get_tokens_for_user(user):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_image_from_gridfs(request, image_id):
-
     try:
         photo_type = get_photo_class(request.GET.get('type', ''))
         photo = get_object_or_404(photo_type, image_id=image_id)
@@ -154,11 +180,3 @@ def get_image_from_gridfs(request, image_id):
     except Exception as e:
         return HttpResponse(f"Error retrieving image: {str(e)}", status=500)
 
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def get_similar_faces(request):
-    photo_check = request.GET.get('type', '').lower() == 'face'
-    if not photo_check:
-        return JsonResponse({'error': 'Invalid photo type'}, status=400)
-    photo_class = get_photo_class('face')

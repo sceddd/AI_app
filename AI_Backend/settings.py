@@ -10,24 +10,19 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 import logging.config
+import os
 from datetime import timedelta
 from pathlib import Path
-import os
-import gdown
-import lmdb
-from djongo.exceptions import print_warn
-from dotenv import load_dotenv
-import djongo
 
+import redis
+from dotenv import load_dotenv
 from kombu import Queue
 from pymongo import MongoClient
-import redis
-import warnings
 
 from account.app_models.cluster_models import DimReductionAndClustering
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-load_dotenv('key.env')
+load_dotenv('.env')
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -201,8 +196,8 @@ os.makedirs(LMDB_PATH, exist_ok=True)
 os.makedirs(LMDB_PATH_FACE, exist_ok=True)
 
 # TorchServe settings
-TS_HOST = 'localhost'
-TS_PORT = '8080'
+TS_HOST = os.getenv('TS_HOST')
+TS_PORT = os.getenv('TS_PORT')
 
 TORCHSERVE_URI_DET = f'http://{TS_HOST}:{TS_PORT}/predictions/facedet'
 TORCHSERVE_URI_REG = f'http://{TS_HOST}:{TS_PORT}/predictions/facereg'

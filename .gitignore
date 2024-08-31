@@ -2,12 +2,12 @@ lmdb
 **/logs/
 **/model_store/
 *weight*/
-__pycache__/
+**/__pycache__/
 *.env
 *.pyc
 .idea/
 **/migrations/
-key.env
+.env
 *.zip
 *.jpeg
 *.jpg

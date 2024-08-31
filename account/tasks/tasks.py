@@ -6,7 +6,7 @@ from celery.result import AsyncResult
 from django.conf import settings
 from django.shortcuts import get_object_or_404
 
-from .face_task import face_recognition_process
+from .face_task import face_recognition_process, process_cluster
 from .obdet import det_process
 from .ocr_task import ocr_process
 from ..app_models.photos import get_photo_class
@@ -105,3 +105,8 @@ def write_cache_and_process(cache):
         return f"Error writing cache: {str(e)}"
 
     return list(cache.keys())
+
+
+@shared_task(queue='image_processing')
+def cluster_face():
+    process_cluster.apply_async()

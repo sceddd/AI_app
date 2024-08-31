@@ -45,13 +45,13 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return self.email
 
-    def image_add(self, image, photo_type):
+    def image_add(self, images, photo_type):
         if photo_type == 'face':
-            self.face_image_ids = image
+            self.face_image_ids.extend(images)
         elif photo_type == 'ocr':
-            self.ocr_image_ids = image
+            self.ocr_image_ids.extend(images)
         elif photo_type == 'ob_det':
-            self.ob_det_image_ids = image
+            self.ob_det_image_ids.extend(images)
         self.save()
 
     def get_image(self, photo_type):
