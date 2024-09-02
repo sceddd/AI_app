@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 import logging.config
 import os
+import sys
 from datetime import timedelta
 from pathlib import Path
 
@@ -18,6 +19,8 @@ import redis
 from dotenv import load_dotenv
 from kombu import Queue
 from pymongo import MongoClient
+from celery.schedules import crontab
+from sympy.physics.units import second
 
 from account.app_models.cluster_models import DimReductionAndClustering
 
@@ -187,6 +190,20 @@ CELERY_TASK_ROUTES = {
     'account.tasks.process_batch': {'queue': 'image_processing'},
     'account.tasks.write_cache_and_process': {'queue': 'write_cache_and_process'}
 }
+
+CELERY_BEAT_SCHEDULE = {
+    'update-is-new-every-hour': {
+        'task': 'account.tasks.tasks.update_is_new_status',
+        'schedule': crontab(minute=0, hour='*'),
+    },
+    'check_failed_task':{
+        'task': 'your_app.tasks.check_and_retry_tasks',
+        'schedule': timedelta(minutes=10),
+    }
+}
+
+BEAT_LOG = os.path.join(BASE_DIR,'logs','schedules')
+os.makedirs(BEAT_LOG,exist_ok=True)
 # LMDB settings
 LMDB_PATH = os.path.join(BASE_DIR, 'lmdb')
 LMDB_BATCH_SIZE = 150
@@ -246,8 +263,18 @@ CL_CFG = {
     },
     'function': 'sklearn.cluster, DBSCAN'
 }
+current_command = sys.argv[1] if len(sys.argv) > 1 else None
 
-CLUSTER_MODEL = DimReductionAndClustering(path=UMAP_WEIGHT_PATH,dr_cfg=DR_CFG,cl_cfg=CL_CFG)
+CLUSTER_MODEL = None if current_command == 'download_weight' else DimReductionAndClustering(path=UMAP_WEIGHT_PATH,dr_cfg=DR_CFG,cl_cfg=CL_CFG)
+YOLOV8_WEIGHT_PATH = os.path.join(BASE_DIR,'model','object_detection','weights','yolov8.pt')
+YOLOW_WEIGHT_PATH = os.path.join(BASE_DIR,'model','object_detection','weights','yolov8m-world.pt')
+VGG = os.path.join(BASE_DIR,'model','object_detection','weights','vgg_face_dag.pt')
+
+os.makedirs(os.path.join(BASE_DIR,'model','object_detection','weights'),exist_ok=True)
+os.makedirs(os.path.join(BASE_DIR,'model','face','weights'),exist_ok=True)
+
+LOG_DIR = os.path.join(BASE_DIR, 'logs')
+os.makedirs(LOG_DIR, exist_ok=True)
 
 LOGGING = {
     "version": 1,  # the dictConfig format version

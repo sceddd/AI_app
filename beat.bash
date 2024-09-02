@@ -1,0 +1,1 @@
+celery -A AI_Backend beat -s logs/schedule --loglevel=INFO --pidfile="/tmp/celerybeat.pid"

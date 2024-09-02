@@ -3,11 +3,11 @@ from django.conf import settings
 from djongo import models
 from gridfs import GridFS
 import logging
-
 from AI_Backend.settings import IMAGE_DB
 
 mongo_client = settings.MONGO_CLIENT
 logging.getLogger(__name__).setLevel(logging.DEBUG)
+redis_client = settings.REDIS_CLIENT
 
 
 class AbstractPhoto(models.Model):
@@ -27,6 +27,7 @@ class AbstractPhoto(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     bounding_boxes = models.JSONField(default=list)
     gridfs_id = models.CharField(max_length=24, null=True, blank=True)
+    is_new = models.BooleanField(default=True)
 
     def __getitem__(self, name):
         return getattr(self, name)
@@ -55,6 +56,13 @@ class AbstractPhoto(models.Model):
 
     def get_image_from_gridfs(self):
         return GridFS(IMAGE_DB, collection=self.default_collection).get(ObjectId(self.gridfs_id)).read()
+
+    def save(self, *args, **kwargs):
+        if not self.is_new and self.pk is not None:
+            original = type(self).objects.get(pk=self.pk)
+            if original.is_new:
+                redis_client.delete(self.image_id)
+        super().save(*args, **kwargs)
 
 
 class FaceEmbedding(models.Model):
@@ -90,7 +98,6 @@ class FacePhoto(AbstractPhoto):
     def to_dict(self, get_faces_info=True):
         faces_info = []
         if get_faces_info:
-
             for face_id in self.faces:
                 try:
                     face_embedding = FaceEmbedding.objects.get(face_id=face_id)

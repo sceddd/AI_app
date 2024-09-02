@@ -2,7 +2,6 @@ import logging
 import uuid
 
 from celery import chain
-from celery.result import AsyncResult
 from django.conf import settings
 from django.contrib.auth import login, authenticate, get_user_model
 from django.http import JsonResponse, HttpResponse
@@ -12,26 +11,14 @@ from rest_framework.decorators import permission_classes, api_view
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .app_models.photos import get_photo_class, AbstractPhoto, FacePhoto
+from .app_models.photos import get_photo_class, AbstractPhoto
 from .forms.login_form import CustomAuthenticationForm
 from .forms.register_form import CustomUserCreationForm
-from .project_utils._utils import chunked_iterable
-from .tasks.tasks import batch_upload_images_to_mongodb, cluster_face
+from .project_utils.utils import chunked_iterable
+from .tasks.tasks import batch_upload_images_to_mongodb, find_similar
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
-
-
-@csrf_exempt
-def task_status(_, task_id):
-    result = AsyncResult(task_id)
-    response = {
-        'task_id': task_id,
-        'state': result.state,
-        'result': result.result if result.state == 'SUCCESS' else None,
-        'error': str(result.info) if result.state == 'FAILURE' else None,
-    }
-    return JsonResponse(response)
 
 
 def get_photo(photo_type):
@@ -63,18 +50,18 @@ def get_similar_faces(request):
         return JsonResponse({'error': 'Invalid photo type'}, status=400)
     user = request.user
 
-    new_photo =  request.FILES['f_image']
+    new_photo = request.FILES['f_image']
     face_id = new_img_upload(new_photo,'face')
     user.image_add(images=[face_id],photo_type='face')
 
     photos_id = user.get_image('face')
     photo_class = get_photo('face')
     photos = photo_class.objects.filter(image_id__in=photos_id)
-    faces_embed = [photo.faces for photo in photos]
+    faces_embed = [photo.to_dict().get('faces') for photo in photos if photo.faces]
     chain(
-        batch_upload_images_to_mongodb.s([face_id], 'faces') |
-        cluster_face().s(faces_embed, face_id)
-    )
+        batch_upload_images_to_mongodb.s([face_id], 'face') |
+        find_similar.s(faces_embed, face_id)
+    ).apply_async()
     return JsonResponse({'message': 'Loading...'}, status=202)
 
 
