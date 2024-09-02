@@ -29,4 +29,4 @@ class Command(BaseCommand):
             download_weights(url_or_id, path)
             self.stdout.write(self.style.SUCCESS(f'{name} weights downloaded successfully.'))
         else:
-            self.stdout.write(self.style.SUCCESS(f'{name} weights already exists.'))
+            self.stdout.write(self.style.SUCCESS('UMAP weights already exist.'))

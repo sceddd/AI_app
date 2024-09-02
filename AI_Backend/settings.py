@@ -34,7 +34,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-2n)$#(4+$^%kfal^1%f1(a7bvir3*$z23ay!&s6uhupv#-2w0s'
+SECRET_KEY = os.getenv('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -213,8 +213,8 @@ os.makedirs(LMDB_PATH, exist_ok=True)
 os.makedirs(LMDB_PATH_FACE, exist_ok=True)
 
 # TorchServe settings
-TS_HOST = os.getenv('TS_HOST')
-TS_PORT = os.getenv('TS_PORT')
+TS_HOST = 'localhost'
+TS_PORT = 8080
 
 TORCHSERVE_URI_DET = f'http://{TS_HOST}:{TS_PORT}/predictions/facedet'
 TORCHSERVE_URI_REG = f'http://{TS_HOST}:{TS_PORT}/predictions/facereg'
@@ -313,7 +313,7 @@ LOGGING = {
     "filters": {
         "specific_text_filter": {
             "()": SpecificTextFilter,
-            "max_length": 100,  # Đặt độ dài tối đa cho log
+            "max_length": 100,
         },
     },
 }
