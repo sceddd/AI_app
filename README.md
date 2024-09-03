@@ -1,8 +1,8 @@
 # WODex 
 ## Description:
-**WODex_b** is a child-friendly application designed to help young users explore and learn about the world through their smartphones. The app features three major functionalities: 
+**WODex_b** is a child-friendly application designed to help young users explore and learn about the world through their smartphones. 
 This project is inspired by the curiosity of children and aims to provide an interactive and educational experience.
-**WODex** is a distributed system application designed to provide an educational and interactive experience for children. The application leverages several advanced technologies to manage and serve its AI models efficiently.
+**WODex** is a distributed system application designed to provide an educational and interactive experience for children. The application leverages several advanced technologies to manage and serve its AI models efficiently. The app features three major functionalities: 
 
 The backend infrastructure uses **TorchServe** to handle the deployment and management of AI models, ensuring that model inference is efficient and scalable. The task queue is managed by **Celery**, which handles asynchronous task processing, allowing the application to manage workloads effectively. The overall system is orchestrated using **Django**, which serves as the web framework to handle the application's logic and user interactions.
 ## Features:
