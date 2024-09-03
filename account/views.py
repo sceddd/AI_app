@@ -14,8 +14,9 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .app_models.photos import get_photo_class, AbstractPhoto
 from .forms.login_form import CustomAuthenticationForm
 from .forms.register_form import CustomUserCreationForm
-from .project_utils.utils import chunked_iterable
-from .tasks.tasks import batch_upload_images_to_mongodb, find_similar
+from .project_utils.account_utils import chunked_iterable
+from .project_utils.utils import listen_to_redis
+from .tasks.tasks import batch_upload_images_to_mongodb
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -51,17 +52,16 @@ def get_similar_faces(request):
     user = request.user
 
     new_photo = request.FILES['f_image']
-    face_id = new_img_upload(new_photo,'face')
-    user.image_add(images=[face_id],photo_type='face')
+    photo_id = new_img_upload(new_photo,'face')
+    user.image_add(images=[photo_id],photo_type='face')
 
-    photos_id = user.get_image('face')
+    list_photos = user.get_image('face')
     photo_class = get_photo('face')
-    photos = photo_class.objects.filter(image_id__in=photos_id)
+    photos = photo_class.objects.filter(image_id__in=list_photos)
     faces_embed = [photo.to_dict().get('faces') for photo in photos if photo.faces]
-    chain(
-        batch_upload_images_to_mongodb.s([face_id], 'face') |
-        find_similar.s(faces_embed, face_id)
-    ).apply_async()
+    batch_upload_images_to_mongodb.apply_async([[photo_id], 'face'])
+    listen_to_redis.apply_async('account.tasks.tasks, find_similar',
+                                kwargs={'faces_embed': faces_embed, 'new_point': photo_id})
     return JsonResponse({'message': 'Loading...'}, status=202)
 
 

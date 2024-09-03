@@ -35,18 +35,18 @@ pip install -r requirements.txt
 The system operates across three ports, each dedicated to specific services:
 **Celery**: Manages task queues, ensuring that tasks are processed in the background efficiently.
 ```
-bash celery.bash
+bash cele.bash
 ```
 
 **Torchserve**: Manages the AI models, with two modes of operation:
 - Build (first time setup): 
 Initializes the environment and prepares models for deployment.
 ```
-bash torchserve.bash -b
+bash ts_build.bash -b
 ```
 - Run (subsequent runs): Starts the TorchServe service to handle model inference. Command: torchserve.bash
 ```
-bash torchserve.bash
+bash ts_build.bash
 ```
 
 **Django**:Manages the web application logic and serves the user interface.

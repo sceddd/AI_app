@@ -127,6 +127,8 @@ class FaceDetectionHandler(BaseHandler):
         logging.info(f"Postprocessing {data} images")
         with self.lmdb_env_write.begin(write=True) as txn:
             for item in data:
+                if not item:
+                    continue
                 img_idx, image, face_datas = item
 
                 img_results = {
@@ -161,14 +163,6 @@ class FaceDetectionHandler(BaseHandler):
         result = convert_to_serializable(result)
 
         return [result]
-
-    def process_embeddings(self, _all_embeddings, transform_only=True):
-        try:
-            combined_embeds = torch.cat(_all_embeddings)
-            dr_embeds = self.model.to_latent_space(combined_embeds.cpu().numpy(), transform_only)
-            labels = self.model.to_cluster(dr_embeds)
-        except Exception as e:
-            print(f'Error processing embeddings: {e}')
 
 
 _service = FaceDetectionHandler()

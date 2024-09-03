@@ -191,26 +191,32 @@ CELERY_TASK_ROUTES = {
     'account.tasks.write_cache_and_process': {'queue': 'write_cache_and_process'}
 }
 
+# celery beat settings
 CELERY_BEAT_SCHEDULE = {
     'update-is-new-every-hour': {
         'task': 'account.tasks.tasks.update_is_new_status',
         'schedule': crontab(minute=0, hour='*'),
     },
     'check_failed_task':{
-        'task': 'your_app.tasks.check_and_retry_tasks',
+        'task': 'account.tasks.tasks.restart_failed_tasks',
         'schedule': timedelta(minutes=10),
     }
 }
 
 BEAT_LOG = os.path.join(BASE_DIR,'logs','schedules')
 os.makedirs(BEAT_LOG,exist_ok=True)
+
 # LMDB settings
+
 LMDB_PATH = os.path.join(BASE_DIR, 'lmdb')
 LMDB_BATCH_SIZE = 150
 LMDB_PATH_FACE = os.path.join(LMDB_PATH,'face', 'det')
+LMDB_PATH_FTASK = os.path.join(LMDB_PATH,'failed_task')
 LMDB_LIMIT = 1099511627776
+
 os.makedirs(LMDB_PATH, exist_ok=True)
 os.makedirs(LMDB_PATH_FACE, exist_ok=True)
+os.makedirs(LMDB_PATH_FTASK, exist_ok=True)
 
 # TorchServe settings
 TS_HOST = 'localhost'
@@ -236,15 +242,8 @@ class SpecificTextFilter(logging.Filter):
         if len(record.msg) > self.max_length:
 
             record.msg = record.msg[:self.max_length] + '...'
-
         return True
 
-
-UMAP_DIR = os.path.join(BASE_DIR, 'account', 'umap_weight')
-UMAP_WEIGHT_PATH = os.path.join(UMAP_DIR, 'umap_weight.pkl')
-if not os.path.exists(UMAP_WEIGHT_PATH):
-    print(f"WARNING: UMAP weights not found at {UMAP_WEIGHT_PATH}.\n"
-                  f"run python manage.py download_weight command first")
 
 DR_CFG = {
         'param': {
@@ -263,12 +262,26 @@ CL_CFG = {
     },
     'function': 'sklearn.cluster, DBSCAN'
 }
+
 current_command = sys.argv[1] if len(sys.argv) > 1 else None
+UMAP_DIR = os.path.join(BASE_DIR, 'account', 'umap_weights')
+UMAP_WEIGHT_PATH = os.path.join(UMAP_DIR, 'umap_weight.pkl')
 
 CLUSTER_MODEL = None if current_command == 'download_weight' else DimReductionAndClustering(path=UMAP_WEIGHT_PATH,dr_cfg=DR_CFG,cl_cfg=CL_CFG)
 YOLOV8_WEIGHT_PATH = os.path.join(BASE_DIR,'model','object_detection','weights','yolov8.pt')
 YOLOW_WEIGHT_PATH = os.path.join(BASE_DIR,'model','object_detection','weights','yolov8m-world.pt')
-VGG = os.path.join(BASE_DIR,'model','object_detection','weights','vgg_face_dag.pt')
+VGG = os.path.join(BASE_DIR,'model','face','weights','vgg_face_dag.pth')
+
+paths_to_check = [UMAP_WEIGHT_PATH, YOLOV8_WEIGHT_PATH, YOLOW_WEIGHT_PATH, VGG]
+missing_paths = [path for path in paths_to_check if not os.path.exists(path)]
+
+if missing_paths:
+    print("WARNING: The following paths were not found:")
+    for path in missing_paths:
+        print(f"\t{path}")
+    print("Please ensure all required files are present.")
+else:
+    print("All required paths are present.")
 
 os.makedirs(os.path.join(BASE_DIR,'model','object_detection','weights'),exist_ok=True)
 os.makedirs(os.path.join(BASE_DIR,'model','face','weights'),exist_ok=True)

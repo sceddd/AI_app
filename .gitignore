@@ -1,7 +1,7 @@
 lmdb
 **/logs/
 **/model_store/
-*weight*/
+*weights*/
 **/__pycache__/
 *.env
 *.pyc

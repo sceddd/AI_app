@@ -10,7 +10,7 @@ from django.conf import settings
 from django.shortcuts import get_object_or_404
 from sklearn.metrics import pairwise_distances
 from torchvision import transforms
-from ..project_utils.utils import push_failed_task_id_to_ssd
+from ..project_utils.utils import push_failed_task_id_to_ssd, publish_new_results
 
 from ..app_models.photos import get_photo_class, FaceEmbedding, AbstractPhoto
 
@@ -45,6 +45,7 @@ def process_response(indices, boxes, reg_response, error, lmdb_path,function_typ
                 else:
                     error.append(f"Unexpected value in response: {idx}")
             photo.faces = results
+            publish_new_results(img_idx, faces=results)
             photo.bounding_boxes = boxes
             photo.status = AbstractPhoto.Status.RESULT_SAVED
             photo.save()
@@ -59,13 +60,16 @@ def process_response(indices, boxes, reg_response, error, lmdb_path,function_typ
 
 @shared_task(queue='image_processing')
 def pairwise_find(embeds,new_point,k=4):
+    logger.info(f"{'*'*100}")
+    logger.info(embeds)
+    logger.info(new_point)
+    logger.info(f"{'*'*100}")
     distances = pairwise_distances(embeds, [new_point], metric='euclidean').flatten()
     nearest_indices = np.argsort(distances)[:k]
     return embeds[nearest_indices]
 
 
 def process_face_up_db(image_data, embed, idx):
-    logger.info(type(embed))
     try:
         logger.info(f"Saving image {idx} to DB")
         if isinstance(image_data, bytes):

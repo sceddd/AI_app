@@ -22,7 +22,7 @@ class AbstractPhoto(models.Model):
         abstract = True
 
     default_collection = None
-    image_id = models.CharField(max_length=24, unique=True,primary_key=True)
+    image_id = models.CharField(max_length=24, unique=True, primary_key=True)
     status = models.IntegerField(choices=Status.choices, default=Status.UPLOADED)
     created_at = models.DateTimeField(auto_now_add=True)
     bounding_boxes = models.JSONField(default=list)
@@ -61,8 +61,16 @@ class AbstractPhoto(models.Model):
         if not self.is_new and self.pk is not None:
             original = type(self).objects.get(pk=self.pk)
             if original.is_new:
-                redis_client.delete(self.image_id)
+                try:
+                    self.is_new = False
+                    redis_client.delete(self.image_id)
+                except Exception as e:
+                    logging.warning(f"DELFailed_Redis: {self.image_id} \t ex: {e}")
         super().save(*args, **kwargs)
+
+    def switch_status(self):
+        self.is_new = not self.is_new
+        return self
 
 
 class FaceEmbedding(models.Model):
@@ -70,7 +78,7 @@ class FaceEmbedding(models.Model):
         super().__init__(*args, **kwargs)
         self.db = GridFS(IMAGE_DB, collection='face_images')
 
-    face_id = models.CharField(max_length=30,primary_key=True)
+    face_id = models.CharField(max_length=30, primary_key=True)
     embedding = models.JSONField()
     gridfs_id = models.CharField(max_length=24, null=True, blank=True)
 
@@ -79,7 +87,7 @@ class FaceEmbedding(models.Model):
 
     def save_image(self, image):
         if isinstance(image, bytes):
-            self.gridfs_id = self.db.put(image,filename=ObjectId(self.face_id))
+            self.gridfs_id = self.db.put(image, filename=ObjectId(self.face_id))
 
     def get_image(self):
         return self.db.get(self.gridfs_id).read()

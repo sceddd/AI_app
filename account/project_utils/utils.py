@@ -1,27 +1,14 @@
-import importlib
 import json
-from itertools import islice
 
 import lmdb
+from celery import shared_task
+from django.conf import settings
 
-from AI_Backend import settings
+from .account_utils import create_module
 
-env = lmdb.open(settings.LMDB_PATH, map_size=settings.LMDB_LIMIT)
-
-
-def create_module(module_str):
-    tmpss = module_str.split(',')
-    assert len(tmpss) == 2, 'Error format of the module path: {}'.format(module_str)
-    module_name, function_name = tmpss[0].strip(), tmpss[1].strip()
-    somemodule = importlib.import_module(module_name, __package__)
-    function = getattr(somemodule, function_name)
-    return function
-
-
-def chunked_iterable(iterable, size):
-    it = iter(iterable)
-    for first in it:
-        yield [first] + list(islice(it, size - 1))
+env = lmdb.open(settings.LMDB_PATH_FTASK, map_size=settings.LMDB_LIMIT)
+r = settings.REDIS_CLIENT
+publisher = r.pubsub()
 
 
 def push_failed_task_id_to_ssd(task_id, **kwargs):
@@ -29,3 +16,31 @@ def push_failed_task_id_to_ssd(task_id, **kwargs):
         data = json.dumps(kwargs)
         txn.put(task_id.encode('utf-8'), data.encode('utf-8'))
 
+
+def get_data_redis(id):
+    value = r.get(id)
+    return value if value is not None else None
+
+
+def publish_new_results(idx, **kwargs):
+    results_idx = 'res_{}'.format(idx)
+    data = json.dumps(kwargs)
+    r.publish('new_results', json.dumps({'id': results_idx, 'data': data}))
+
+
+@shared_task(queue='image_processing')
+def listen_to_redis(module_str, **kwargs):
+    pubsub = r.pubsub()
+    pubsub.subscribe('new_results')
+
+    for message in pubsub.listen():
+        if message['type'] == 'message':
+            data = json.loads(message['data'])
+            result_id = data.get('id')
+            result_data = json.loads(data.get('data', '{}'))
+
+            callback_func = create_module(module_str)
+            if callback_func:
+                callback_func.delay(result_id, result_data,**kwargs)
+            else:
+                raise ValueError(f"Callback function not found in {module_str}")

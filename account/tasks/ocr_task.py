@@ -4,7 +4,6 @@ import logging
 import requests
 from celery import shared_task
 from django.shortcuts import get_object_or_404
-from numpy import error_message
 
 from AI_Backend import settings
 from account.app_models.photos import AbstractPhoto, OCRPhoto

@@ -1,6 +1,5 @@
-import numpy as np
 
-from ..project_utils.utils import create_module
+from ..project_utils.account_utils import create_module
 import joblib
 
 
