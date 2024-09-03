@@ -27,7 +27,7 @@ cd WODex_b
 
 #### create a Conda environment:
 ```
-conda create --name WODex_b python=3.8
+conda create --name WODex_b python=3.12
 conda activate WODex_b
 pip install -r requirements.txt
 ```
