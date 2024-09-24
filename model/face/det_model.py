@@ -86,14 +86,14 @@ class FaceDetectionHandler(BaseHandler):
         else:
             payload = json.loads(request)
 
-        input_path = payload.get("lmdb_path",None)
+        input_path = payload.get("lmdb_path","")
         if input_path is None:
             raise ValueError(f"lmdb_path must be provided in the payload and cannot be None")
 
         if not os.path.exists(input_path):
             raise FileNotFoundError(f"LMDB path {input_path} does not exist.")
 
-        output_path = os.path.join(input_path,'face', 'det')
+        output_path = os.path.join("/home/victor-ho/work/school/final/backend/WODex/lmdb",'face', 'det')
 
         if not os.path.exists(output_path):
             raise FileNotFoundError(f"LMDB path {output_path} does not exist.")
