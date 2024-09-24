@@ -1,13 +1,33 @@
-from bson import ObjectId
+import logging
+
 from django.conf import settings
 from djongo import models
 from gridfs import GridFS
-import logging
+
 from AI_Backend.settings import IMAGE_DB
 
 mongo_client = settings.MONGO_CLIENT
 logging.getLogger(__name__).setLevel(logging.DEBUG)
 redis_client = settings.REDIS_CLIENT
+
+
+class BoundingBox(models.Model):
+    bounding_boxes = models.JSONField(default=list)
+    confidence = models.FloatField(default=0.0)
+    class_name = models.CharField(max_length=30)
+
+    class Meta:
+        abstract = True  # Set the model as abstract for embedding
+
+    def to_dict(self):
+        return {
+            'bboxes': self.bounding_boxes,
+            'conf': self.confidence,
+            'cls': self.class_name,
+        }
+
+    def __getitem__(self, name):
+        return getattr(self, name)
 
 
 class AbstractPhoto(models.Model):
@@ -25,9 +45,13 @@ class AbstractPhoto(models.Model):
     image_id = models.CharField(max_length=24, unique=True, primary_key=True)
     status = models.IntegerField(choices=Status.choices, default=Status.UPLOADED)
     created_at = models.DateTimeField(auto_now_add=True)
-    bounding_boxes = models.JSONField(default=list)
-    gridfs_id = models.CharField(max_length=24, null=True, blank=True)
     is_new = models.BooleanField(default=True)
+
+    # Use ArrayField with model_container set to BoundingBox
+    bounding_boxes = models.ArrayField(
+        model_container=BoundingBox,
+        default=list,
+    )
 
     def __getitem__(self, name):
         return getattr(self, name)
@@ -39,31 +63,23 @@ class AbstractPhoto(models.Model):
 
     @classmethod
     def get_all_photos(cls):
-        return cls.objects.all()
+        return cls.objects.all()[:100]
 
     def to_dict(self):
         return {
             'status': self.status,
             'image_id': self.image_id,
-            'created_at': self.created_at.isoformat(),  # Convert datetime to string in ISO format
-            'bounding_boxes': self.bounding_boxes,
+            'created_at': self.created_at.isoformat(),
+            'bounding_boxes': [bbox.to_dict() for bbox in self.bounding_boxes],
         }
-
-    def save_image_to_gridfs(self, image_file):
-        file_id = GridFS(IMAGE_DB, collection=self.default_collection).put(image_file, filename=self.image_id)
-        self.gridfs_id = str(file_id)
-        self.save(update_fields=['gridfs_id'])
-
-    def get_image_from_gridfs(self):
-        return GridFS(IMAGE_DB, collection=self.default_collection).get(ObjectId(self.gridfs_id)).read()
 
     def save(self, *args, **kwargs):
         if not self.is_new and self.pk is not None:
+            logging.info(self.pk)
             original = type(self).objects.get(pk=self.pk)
             if original.is_new:
                 try:
-                    self.is_new = False
-                    redis_client.delete(self.image_id)
+                    pass  # Your logic here
                 except Exception as e:
                     logging.warning(f"DELFailed_Redis: {self.image_id} \t ex: {e}")
         super().save(*args, **kwargs)
@@ -80,17 +96,9 @@ class FaceEmbedding(models.Model):
 
     face_id = models.CharField(max_length=30, primary_key=True)
     embedding = models.JSONField()
-    gridfs_id = models.CharField(max_length=24, null=True, blank=True)
 
     def __getitem__(self, name):
         return getattr(self, name)
-
-    def save_image(self, image):
-        if isinstance(image, bytes):
-            self.gridfs_id = self.db.put(image, filename=ObjectId(self.face_id))
-
-    def get_image(self):
-        return self.db.get(self.gridfs_id).read()
 
     def to_dict(self):
         return {
@@ -149,3 +157,4 @@ def get_photo_class(photo_type):
         return ObjectDetPhoto
     else:
         raise ValueError(f"Unknown photo type: {photo_type}")
+

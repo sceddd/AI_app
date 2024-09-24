@@ -14,7 +14,7 @@ class Command(BaseCommand):
         weights = [
             ('UMAP', '17gcURWEy1BrQkk_zqWGeBIdyOS1Shz_0', settings.UMAP_WEIGHT_PATH),
             ('YOLO-WORLD',
-             'https://huggingface.co/wondervictor/YOLO-World/raw/main/yolo_world_v2_m_obj365v1_goldg_pretrain_1280ft-77d0346d.pth',
+             'https://github.com/ultralytics/assets/releases/download/v8.2.0/yolov8s-world.pt',
              settings.YOLOW_WEIGHT_PATH),
             ('YOLOV8', '1-weMXsdqjylVh7G5c9KfLSGsyVQN4h67', settings.YOLOV8_WEIGHT_PATH),
             ('VGGFACE', 'https://www.robots.ox.ac.uk/~albanie/models/pytorch-mcn/vgg_face_dag.pth',settings.VGG),

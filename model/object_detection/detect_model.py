@@ -46,7 +46,8 @@ def clean_json_dict(data):
 class OCRHandler(BaseHandler):
     def initialize(self, context):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.model = YOLO("yolov8n.pt")
+        # self.model = YOLO("yolov8n.pt")
+        self.model = YOLO("yolov8s-world.pt")
 
     def preprocess(self, data):
         request = data[0].get('body')
@@ -54,6 +55,8 @@ class OCRHandler(BaseHandler):
             payload = request
         else:
             payload = json.loads(request)
+        input_txt = payload.get("input_txt", [])
+        self.model.set_classes(input_txt)
         input_path = payload.get("lmdb_path", None)
         if input_path is None:
             raise ValueError(f"lmdb_path must be provided in the payload and cannot be None")

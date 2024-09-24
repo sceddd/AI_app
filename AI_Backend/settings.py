@@ -39,7 +39,9 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    "*"
+]
 
 # Application definition
 
@@ -194,7 +196,7 @@ CELERY_TASK_ROUTES = {
 # celery beat settings
 CELERY_BEAT_SCHEDULE = {
     'update-is-new-every-hour': {
-        'task': 'account.tasks.tasks.update_is_new_status',
+        'task': 'account.tasks.tasks.system_refresh',
         'schedule': crontab(minute=0, hour='*'),
     },
     'check_failed_task':{
@@ -209,11 +211,14 @@ os.makedirs(BEAT_LOG,exist_ok=True)
 # LMDB settings
 
 LMDB_PATH = os.path.join(BASE_DIR, 'lmdb')
-LMDB_BATCH_SIZE = 150
+LMDB_BATCH_SIZE = 100
 LMDB_PATH_FACE = os.path.join(LMDB_PATH,'face', 'det')
 LMDB_PATH_FTASK = os.path.join(LMDB_PATH,'failed_task')
-LMDB_LIMIT = 1099511627776
-
+LMDB_PATH_RESULT = os.path.join(LMDB_PATH,'result')
+LMDB_LIMIT = 1024 * 1024 * 1
+ZIP_PATH = os.path.join(LMDB_PATH,"zip")
+os.makedirs(ZIP_PATH,exist_ok=True)
+os.makedirs(LMDB_PATH_RESULT, exist_ok=True)
 os.makedirs(LMDB_PATH, exist_ok=True)
 os.makedirs(LMDB_PATH_FACE, exist_ok=True)
 os.makedirs(LMDB_PATH_FTASK, exist_ok=True)
@@ -262,14 +267,15 @@ CL_CFG = {
     },
     'function': 'sklearn.cluster, DBSCAN'
 }
-
+MODEL_STORE = os.path.join(BASE_DIR, 'model','model_store')
+os.makedirs(MODEL_STORE,exist_ok=True)
 current_command = sys.argv[1] if len(sys.argv) > 1 else None
 UMAP_DIR = os.path.join(BASE_DIR, 'account', 'umap_weights')
 UMAP_WEIGHT_PATH = os.path.join(UMAP_DIR, 'umap_weight.pkl')
 
 CLUSTER_MODEL = None if current_command == 'download_weight' else DimReductionAndClustering(path=UMAP_WEIGHT_PATH,dr_cfg=DR_CFG,cl_cfg=CL_CFG)
-YOLOV8_WEIGHT_PATH = os.path.join(BASE_DIR,'model','object_detection','weights','yolov8.pt')
-YOLOW_WEIGHT_PATH = os.path.join(BASE_DIR,'model','object_detection','weights','yolov8m-world.pt')
+YOLOV8_WEIGHT_PATH = os.path.join(BASE_DIR,'model','object_detection','weights', 'yolov8n.pt')
+YOLOW_WEIGHT_PATH = os.path.join(BASE_DIR,'model','object_detection','weights','yolov8s-world.pt')
 VGG = os.path.join(BASE_DIR,'model','face','weights','vgg_face_dag.pth')
 
 paths_to_check = [UMAP_WEIGHT_PATH, YOLOV8_WEIGHT_PATH, YOLOW_WEIGHT_PATH, VGG]

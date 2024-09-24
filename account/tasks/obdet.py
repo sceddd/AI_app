@@ -13,12 +13,12 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task(bind=True, queue='image_processing')
-def det_process(self, indices):
+def det_process(self, indices,input_words):
     err = []
     task_id = self.request.id
 
     logger.info(f"Processing images {indices}")
-    od_payload = json.dumps({'idx': indices, 'lmdb_path': settings.LMDB_PATH})
+    od_payload = json.dumps({'idx': indices, 'lmdb_path': settings.LMDB_PATH, "input_txt": input_words})
 
     try:
         det_response = requests.post(settings.TORCHSERVE_URI_OD, headers={'Content-Type': 'application/json'},
