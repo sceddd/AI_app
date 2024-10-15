@@ -80,7 +80,6 @@ class OCRHandler(BaseHandler):
 
                     objects = [{
                         'conf': ob_det.boxes.conf.tolist(),
-                        'class_ids': ob_det.boxes.cls.tolist(),
                         'classes': [self.model.names[int(cls_id)] for cls_id in ob_det.boxes.cls.tolist()]
                         }
                         for ob_det in ob_dets

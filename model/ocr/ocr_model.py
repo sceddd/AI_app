@@ -66,8 +66,9 @@ class OCRHandler(BaseHandler):
                     ocr = self.model.get_result(image)
                     results.append({
                         'idx': idx,
-                        'boxes': ocr['boxes'],
-                        'texts': ocr['texts']
+                        'bboxes': ocr['boxes'],
+                        'cls': ocr['texts'],
+                        'cnf': 0.8
                     })
 
                 except Exception as e:
@@ -77,7 +78,6 @@ class OCRHandler(BaseHandler):
                         'boxes': None,
                         'texts': None
                     })
-        logging.info(f"Extracted texts :{ocr['texts']} ")
         return results
 
     def postprocess(self, inference_output):

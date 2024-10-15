@@ -6,7 +6,7 @@ from celery import shared_task
 from django.shortcuts import get_object_or_404
 
 from AI_Backend import settings
-from account.app_models.photos import AbstractPhoto, OCRPhoto
+from account.app_models.photos import AbstractPhoto, OCRPhoto, BoundingBox
 from ..project_utils.utils import push_failed_task_id_to_ssd
 
 logger = logging.getLogger(__name__)
@@ -16,8 +16,16 @@ def process_ocr_image(ocr_data, err):
     idx = ocr_data.get('idx')
     try:
         photo = get_object_or_404(OCRPhoto, image_id=idx)
-        photo.texts = ocr_data.get('texts', []) if ocr_data.get('texts') else []
-        photo.bounding_boxes = ocr_data.get('boxes', []) if ocr_data.get('boxes') else []
+        print(ocr_data)
+        for idx in range(len(ocr_data['bboxes'])):
+            print(ocr_data['bboxes'][idx])
+            print(ocr_data['cls'][idx])
+            data = {
+                'bboxes': ocr_data['bboxes'][idx],
+                'conf': ocr_data.get('cnf', 0.0),
+                'cls': ocr_data['cls'][idx]
+            }
+            photo.add_bounding_box(BoundingBox(**data))
         photo.status = AbstractPhoto.Status.RESULT_SAVED
         photo.save()
         logger.info(f"Image {photo} processed successfully.")
@@ -30,9 +38,9 @@ def process_ocr_image(ocr_data, err):
 def ocr_process(self, indices):
     err = []
     task_id = self.request.id
-
+    user_id = indices[0].split('_')[0]
     logger.info(f"Processing images {indices}")
-    ocr_payload = json.dumps({'idx': indices, 'lmdb_path': settings.LMDB_PATH})
+    ocr_payload = json.dumps({'idx': indices, 'lmdb_path': settings.LMDB_PATH + f"/user/{user_id}"})
     try:
         ocr_response = requests.post(settings.TORCHSERVE_URI_OCR, headers={'Content-Type': 'application/json'},
                                      data=ocr_payload)

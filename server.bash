@@ -2,7 +2,7 @@ while getopts ":b" opt; do
   case $opt in
     b)
       python3 manage.py download_weight
-      python3 manage.py makemigrations
+      python3 manage.py makemigrations account
       python3 manage.py migrate
     ;;
 

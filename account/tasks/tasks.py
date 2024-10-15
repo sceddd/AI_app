@@ -34,7 +34,6 @@ def system_refresh():
 
 @shared_task
 def refresh_lmdb():
-    #remove the lmdb folders settings.LMDB_PATH only
     for folder in os.listdir(settings.LMDB_PATH):
         if folder != 'user':
             path = Path(settings.LMDB_PATH) / folder
@@ -98,7 +97,7 @@ def write_cache_and_process(cache, user_id):
 def process_zip_file_lmdb(self, zip_key, user_id):
     user = CustomUser.objects.get(pk=user_id)
 
-    zip_env = lmdb.open(settings.ZIP_PATH)
+    zip_env = lmdb.open(settings.ZIP_PATH, map_size=lmdb_limit)
     try:
         with zip_env.begin(write=True) as txn:
             zip_data = txn.get(zip_key.encode('utf-8'))
@@ -157,6 +156,7 @@ def process_zip_file_lmdb(self, zip_key, user_id):
 
 def find_similar(faces_embed, photo_embed, k):
     if photo_embed is not None:
+
         return {'k_faces': pairwise_find(faces_embed, photo_embed, k)}
     else:
         return {'error': 'No face detected in this photo'}

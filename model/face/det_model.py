@@ -93,13 +93,13 @@ class FaceDetectionHandler(BaseHandler):
         if not os.path.exists(input_path):
             raise FileNotFoundError(f"LMDB path {input_path} does not exist.")
 
-        output_path = os.path.join("/home/victor-ho/work/school/final/backend/WODex/lmdb",'face', 'det')
+        output_path = os.path.join(os.path.dirname(os.path.dirname(input_path)),'face', 'det')
 
         if not os.path.exists(output_path):
             raise FileNotFoundError(f"LMDB path {output_path} does not exist.")
 
         self.lmdb_env_read = lmdb.open(input_path, readonly=True, lock=False)
-        self.lmdb_env_write = lmdb.open(output_path,readonly=False, lock=False, map_size=1099511627776)
+        self.lmdb_env_write = lmdb.open(output_path,readonly=False, lock=False, map_size=x)
 
         return payload.get("idx")
 
@@ -152,6 +152,9 @@ class FaceDetectionHandler(BaseHandler):
                             face_key = str(ObjectId())
                             txn.put(face_key.encode('utf-8'), pickle.dumps(face_data))
                             img_results['face_key'].append(face_key)
+                            logging.info(img_results)
+                            img_results['cnf'] = conf
+
                             img_results['boxes'].append([int(coord) for coord in box])
                         else:
                             logging.info(f"Face detection confidence too low: {conf}")

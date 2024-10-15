@@ -12,7 +12,7 @@ from sklearn.metrics import pairwise_distances
 from torchvision import transforms
 from ..project_utils.utils import push_failed_task_id_to_ssd, publish_new_results
 
-from ..app_models.photos import get_photo_class, FaceEmbedding, AbstractPhoto
+from ..app_models.photos import get_photo_class, FaceEmbedding, AbstractPhoto, BoundingBox
 
 r = settings.REDIS_CLIENT
 logger = logging.getLogger(__name__)
@@ -26,9 +26,12 @@ def process_response(indices, boxes, reg_response, error, lmdb_path,function_typ
     logger.info(f"Processing boxes {boxes}")
     embeds = []
     for img_idx, boxes, idx in zip(indices, boxes, reg_response.keys()):
-        try:
+        # try:
             results = []
             photo = get_object_or_404(photo_type, image_id=img_idx)
+            if boxes['bboxes'] is None:
+                error.append(f"No faces detected in image with idx {idx}.")
+                continue
             with face_env.begin() as txn:
                 if isinstance(idx, str) and (reg_response[idx] is not None):
                     stored_data = txn.get(idx.encode('utf-8'))
@@ -46,13 +49,14 @@ def process_response(indices, boxes, reg_response, error, lmdb_path,function_typ
                     error.append(f"Unexpected value in response: {idx}")
             photo.faces = results
             publish_new_results(img_idx, faces=results)
-            photo.bounding_boxes = boxes
+            logger.info(boxes)
+            photo.add_bounding_box(BoundingBox(**boxes))
             photo.status = AbstractPhoto.Status.RESULT_SAVED
             photo.save()
-        except Exception as e:
-            logger.error(f"Error processing image {idx}:{e}")
-            error_message = "face_SAVEFailed:{}".format(e)
-            push_failed_task_id_to_ssd(task_id, indices=indices, error=error_message)
+        # except Exception as e:
+        #     logger.error(f"Error processing image {idx}:{e}")
+        #     error_message = "face_SAVEFailed:{}".format(e)
+        #     push_failed_task_id_to_ssd(task_id, indices=indices, error=error_message)
     face_env.close()
 
     return error
@@ -75,13 +79,11 @@ def process_response(indices, boxes, reg_response, error, lmdb_path,function_typ
 
 
 def pairwise_find(embeds_list, new_point, k=4):
-    try:
-        # Trích xuất image_ids và embeddings
+    # try:
         image_ids = []
         embeddings = []
 
         for img_id, faces in embeds_list.items():
-            # faces có thể là list hoặc dict
             face_embeddings = extract_embedding(faces)
             if isinstance(face_embeddings, list):
                 for embed in face_embeddings:
@@ -91,7 +93,6 @@ def pairwise_find(embeds_list, new_point, k=4):
                     else:
                         logger.warning(f"Invalid embedding for image_id {img_id}: {embed}")
             else:
-                # Nếu face_embeddings là một embedding đơn lẻ
                 embed = face_embeddings
                 if embed and isinstance(embed, list) and all(isinstance(x, (int, float)) for x in embed):
                     image_ids.append(img_id)
@@ -103,10 +104,8 @@ def pairwise_find(embeds_list, new_point, k=4):
             logger.error("No valid embeddings found in embeds_list.")
             return {"status": "failure", "error": "No valid embeddings found."}
 
-        # Chuyển đổi thành NumPy array
         embeddings_array = np.array(embeddings)
 
-        # Trích xuất và kiểm tra new_point
         if 'embedding' not in new_point:
             logger.error("new_point does not contain 'embedding' key.")
             return {"status": "failure", "error": "new_point does not contain 'embedding' key."}
@@ -118,7 +117,6 @@ def pairwise_find(embeds_list, new_point, k=4):
 
         new_point_embedding = np.array(new_point['embedding']).reshape(1, -1)
 
-        # Tính khoảng cách Euclidean
         distances = pairwise_distances(embeddings_array, new_point_embedding, metric='euclidean').flatten()
 
         max_size = min(k, len(distances))
@@ -134,24 +132,19 @@ def pairwise_find(embeds_list, new_point, k=4):
 
         return nearest_points
 
-    except KeyError as e:
-        logger.error(f"Error finding similar faces: {e}")
-        return {"status": "failure", "error": str(e)}
-    except Exception as e:
-        logger.error(f"Unexpected error in pairwise_find: {e}")
-        return {"status": "failure", "error": "An unexpected error occurred."}
+    # except KeyError as e:
+    #     logger.error(f"Error finding similar faces: {e}")
+    #     return {"status": "failure", "error": str(e)}
+    # except Exception as e:
+    #     logger.error(f"Unexpected error in pairwise_find: {e}")
+    #     return {"status": "failure", "error": "An unexpected error occurred."}
 
 
 def extract_embedding(face):
-    """
-    Trích xuất embedding từ đối tượng face.
-    Nếu face là dict, trả về giá trị của khóa 'embedding'.
-    Nếu face là list, trả về danh sách các embedding từ mỗi dict trong list.
-    """
     if isinstance(face, dict):
+        print(face)
         return face.get('embedding', [])
     elif isinstance(face, list):
-        # Trả về danh sách các embedding từ mỗi dict trong list
         return [f.get('embedding', []) for f in face if isinstance(f, dict)]
     else:
         return []
@@ -196,9 +189,19 @@ def face_recognition_process(self, indices):
             'lmdb_path': settings.LMDB_PATH_FACE
         })
         # Face embedding
-        face_embed = face_to_embed(faces_payload)
-        boxes = [face.get('boxes') for face in face_det_response]
+        logger.info(f"Face Detection Response: {face_det_response}")
+        boxes = [
+            {
+                'bboxes': face.get('boxes')[0],
+                'conf': face.get('cnf'),
+                'cls': 'face'
+            }
+            for face in face_det_response if face.get('boxes') is not None
+        ]
 
+        face_embed = face_to_embed(faces_payload)
+
+        logger.warning(boxes)
         err = process_response(indices, boxes, face_embed, err, settings.LMDB_PATH_FACE,
                                function_type='face',
                                task_id=task_id)
@@ -208,7 +211,11 @@ def face_recognition_process(self, indices):
         push_failed_task_id_to_ssd(task_id, indices=indices, error=error_message)
 
         return {'status': 'failure', 'error': err}
-
+    except IndexError as e:
+        error_message = f'face_REGFailed:{e}'
+        logger.error(f"Face Detection Failed: {error_message}")
+        push_failed_task_id_to_ssd(task_id, indices=indices, error=error_message)
+        return {'status': 'failure', 'error': err}
     return {'status': 'success', 'error': err}
 
 

@@ -16,9 +16,10 @@ logger = logging.getLogger(__name__)
 def det_process(self, indices,input_words):
     err = []
     task_id = self.request.id
-
+    user_id = indices[0].split('_')[0]
     logger.info(f"Processing images {indices}")
-    od_payload = json.dumps({'idx': indices, 'lmdb_path': settings.LMDB_PATH, "input_txt": input_words})
+    od_payload = json.dumps({'idx': indices, 'input_txt': input_words,
+                             'lmdb_path': settings.LMDB_PATH + f"/user/{user_id}"})
 
     try:
         det_response = requests.post(settings.TORCHSERVE_URI_OD, headers={'Content-Type': 'application/json'},
@@ -41,7 +42,15 @@ def process_od_image(od_data, err):
     idx = od_data.get('idx')
     try:
         photo = get_object_or_404(ObjectDetPhoto, image_id=idx)
-        photo.bounding_boxes = od_data.get('boxes', []) if od_data.get('boxes') else []
+        logger.info(photo)
+        logger.info(od_data)
+        # for data in od_data.get('boxes', []):
+        #     ob_det = {
+        #
+        #     }
+        #     photo.add_bounding_box(ob_det)
+        #     break
+
         photo.objects_det = od_data.get('objects', []) if od_data.get('objects') else []
         photo.status = AbstractPhoto.Status.RESULT_SAVED
         photo.save()

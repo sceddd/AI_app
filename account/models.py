@@ -1,5 +1,4 @@
 from django.contrib.auth.base_user import BaseUserManager
-from wheel.metadata import _
 from django.contrib.auth.models import AbstractBaseUser
 from django.contrib.auth.models import PermissionsMixin
 from django.utils.translation import gettext_lazy as _
@@ -26,7 +25,8 @@ class CustomUserManager(BaseUserManager):
 
 
 class CustomUser(AbstractBaseUser, PermissionsMixin):
-    id = models.ObjectIdField(primary_key=True)
+    # id = models.ObjectIdField(primary_key=True)
+
     email = models.EmailField(_('email address'), unique=True)
     is_staff = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)

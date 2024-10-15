@@ -37,7 +37,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = [
     "*"
@@ -211,11 +211,11 @@ os.makedirs(BEAT_LOG,exist_ok=True)
 # LMDB settings
 
 LMDB_PATH = os.path.join(BASE_DIR, 'lmdb')
-LMDB_BATCH_SIZE = 100
+LMDB_BATCH_SIZE = 50
 LMDB_PATH_FACE = os.path.join(LMDB_PATH,'face', 'det')
 LMDB_PATH_FTASK = os.path.join(LMDB_PATH,'failed_task')
 LMDB_PATH_RESULT = os.path.join(LMDB_PATH,'result')
-LMDB_LIMIT = 1024 * 1024 * 1
+LMDB_LIMIT = 1024 * 1024 * 1024
 ZIP_PATH = os.path.join(LMDB_PATH,"zip")
 os.makedirs(ZIP_PATH,exist_ok=True)
 os.makedirs(LMDB_PATH_RESULT, exist_ok=True)

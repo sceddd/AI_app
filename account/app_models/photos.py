@@ -1,23 +1,24 @@
+import datetime
 import logging
 
 from django.conf import settings
 from djongo import models
-from gridfs import GridFS
-
-from AI_Backend.settings import IMAGE_DB
+import django.utils.timezone as timezone
 
 mongo_client = settings.MONGO_CLIENT
 logging.getLogger(__name__).setLevel(logging.DEBUG)
 redis_client = settings.REDIS_CLIENT
 
 
-class BoundingBox(models.Model):
+class BoundingBox:
     bounding_boxes = models.JSONField(default=list)
     confidence = models.FloatField(default=0.0)
     class_name = models.CharField(max_length=30)
 
-    class Meta:
-        abstract = True  # Set the model as abstract for embedding
+    def __init__(self, bboxes, conf, cls):
+        self.bounding_boxes = bboxes
+        self.confidence = conf
+        self.class_name = cls
 
     def to_dict(self):
         return {
@@ -44,14 +45,12 @@ class AbstractPhoto(models.Model):
     default_collection = None
     image_id = models.CharField(max_length=24, unique=True, primary_key=True)
     status = models.IntegerField(choices=Status.choices, default=Status.UPLOADED)
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(default=timezone.now)
     is_new = models.BooleanField(default=True)
+    bounding_boxes = models.JSONField(default=list)
 
-    # Use ArrayField with model_container set to BoundingBox
-    bounding_boxes = models.ArrayField(
-        model_container=BoundingBox,
-        default=list,
-    )
+    def add_bounding_box(self, bounding_box):
+        self.bounding_boxes.append(bounding_box.to_dict())
 
     def __getitem__(self, name):
         return getattr(self, name)
@@ -70,7 +69,7 @@ class AbstractPhoto(models.Model):
             'status': self.status,
             'image_id': self.image_id,
             'created_at': self.created_at.isoformat(),
-            'bounding_boxes': [bbox.to_dict() for bbox in self.bounding_boxes],
+            'bounding_boxes': [bbox for bbox in self.bounding_boxes],
         }
 
     def save(self, *args, **kwargs):
@@ -92,8 +91,6 @@ class AbstractPhoto(models.Model):
 class FaceEmbedding(models.Model):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.db = GridFS(IMAGE_DB, collection='face_images')
-
     face_id = models.CharField(max_length=30, primary_key=True)
     embedding = models.JSONField()
 
@@ -127,24 +124,20 @@ class FacePhoto(AbstractPhoto):
 
 
 class OCRPhoto(AbstractPhoto):
-    texts = models.JSONField(default=list)
     default_collection = 'ocr_images'
 
     def to_dict(self):
         return {
             **super().to_dict(),
-            'texts': self.texts,
         }
 
 
 class ObjectDetPhoto(AbstractPhoto):
-    objects_det = models.JSONField(default=list)
     default_collection = 'od_images'
 
     def to_dict(self):
         return {
             **super().to_dict(),
-            'objects_det': self.objects_det,
         }
 
 
