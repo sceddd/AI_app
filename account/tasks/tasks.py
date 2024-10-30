@@ -52,7 +52,6 @@ def update_status():
 
 @shared_task(queue='image_processing')
 def process_batch(indices, function_type='face'):
-    logger.info(function_type)
     logger.info(f"Processing batch of {len(indices)} images for {function_type}")
     if function_type.startswith('face'):
         return face_recognition_process.apply_async(args=[indices], queue='image_processing')

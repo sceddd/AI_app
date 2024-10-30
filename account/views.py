@@ -54,7 +54,6 @@ def check_task_status(request, task_id):
     if task_result.state == 'PENDING':
         return JsonResponse({'state': task_result.state}, status=202)
     elif task_result.state == 'SUCCESS':
-        print(task_result.result)
         return JsonResponse({'state': task_result.state, 'result': task_result.result}, status=200)
     elif task_result.state == 'FAILURE':
         return JsonResponse({'state': task_result.state, 'error': str(task_result.info)}, status=500)
@@ -68,6 +67,7 @@ def get_similar_faces(user,photo_id,k_faces=4):
         return JsonResponse({'error': 'Invalid value for k'}, status=400)
     if not photo_id:
         return JsonResponse({'error': 'photo_id is required'}, status=400)
+    response = []
     list_photos = set(user.get_image('face'))
     if photo_id in list_photos:
         list_photos.remove(photo_id)
@@ -225,7 +225,6 @@ def get_tokens_for_user(user):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_image(request):
-    print(f"GET parameters: {request.GET}")
     try:
         print('GET: account/get_image')
         photo_type = request.GET.get('type', '').lower()

@@ -26,12 +26,9 @@ def process_response(indices, boxes, reg_response, error, lmdb_path,function_typ
     logger.info(f"Processing boxes {boxes}")
     embeds = []
     for img_idx, boxes, idx in zip(indices, boxes, reg_response.keys()):
-        # try:
+        try:
             results = []
             photo = get_object_or_404(photo_type, image_id=img_idx)
-            if boxes['bboxes'] is None:
-                error.append(f"No faces detected in image with idx {idx}.")
-                continue
             with face_env.begin() as txn:
                 if isinstance(idx, str) and (reg_response[idx] is not None):
                     stored_data = txn.get(idx.encode('utf-8'))
@@ -53,10 +50,10 @@ def process_response(indices, boxes, reg_response, error, lmdb_path,function_typ
             photo.add_bounding_box(BoundingBox(**boxes))
             photo.status = AbstractPhoto.Status.RESULT_SAVED
             photo.save()
-        # except Exception as e:
-        #     logger.error(f"Error processing image {idx}:{e}")
-        #     error_message = "face_SAVEFailed:{}".format(e)
-        #     push_failed_task_id_to_ssd(task_id, indices=indices, error=error_message)
+        except Exception as e:
+            logger.error(f"Error processing image {idx}:{e}")
+            error_message = "face_SAVEFailed:{}".format(e)
+            push_failed_task_id_to_ssd(task_id, indices=indices, error=error_message)
     face_env.close()
 
     return error
@@ -84,6 +81,7 @@ def pairwise_find(embeds_list, new_point, k=4):
         embeddings = []
 
         for img_id, faces in embeds_list.items():
+            # faces có thể là list hoặc dict
             face_embeddings = extract_embedding(faces)
             if isinstance(face_embeddings, list):
                 for embed in face_embeddings:
@@ -93,6 +91,7 @@ def pairwise_find(embeds_list, new_point, k=4):
                     else:
                         logger.warning(f"Invalid embedding for image_id {img_id}: {embed}")
             else:
+                # Nếu face_embeddings là một embedding đơn lẻ
                 embed = face_embeddings
                 if embed and isinstance(embed, list) and all(isinstance(x, (int, float)) for x in embed):
                     image_ids.append(img_id)
@@ -142,7 +141,6 @@ def pairwise_find(embeds_list, new_point, k=4):
 
 def extract_embedding(face):
     if isinstance(face, dict):
-        print(face)
         return face.get('embedding', [])
     elif isinstance(face, list):
         return [f.get('embedding', []) for f in face if isinstance(f, dict)]
@@ -200,6 +198,7 @@ def face_recognition_process(self, indices):
         ]
 
         face_embed = face_to_embed(faces_payload)
+        boxes = [face.get('boxes') for face in face_det_response]
 
         err = process_response(indices, boxes, face_embed, err, settings.LMDB_PATH_FACE,
                                function_type='face',
@@ -215,6 +214,7 @@ def face_recognition_process(self, indices):
         logger.error(f"Face Detection Failed: {error_message}")
         push_failed_task_id_to_ssd(task_id, indices=indices, error=error_message)
         return {'status': 'failure', 'error': err}
+
     return {'status': 'success', 'error': err}
 
 

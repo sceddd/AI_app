@@ -6,6 +6,7 @@ gdown==5.2.0
 joblib==1.4.2
 kombu==5.4.0
 lmdb==1.5.1
+sqlparse==0.2.4
 numpy==1.26.4
 Pillow==10.2.0
 pymongo==4.8.0
