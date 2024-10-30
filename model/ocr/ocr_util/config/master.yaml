@@ -1,0 +1,94 @@
+base:
+  model_type: text_recognition
+  algorithm: MASTER
+  save_dir: saved
+  gpu_id: 1
+
+dataset:
+  type: 'txt'  # lmdb / txt
+  new_shape: [256, 32]
+  train_load:
+    train_img_dir: 'dataset/hoadon_ocr'
+    train_label_dir: 'dataset/hoadon_ocr/train.txt'
+    batch_size: 32
+    num_workers: 4
+  test_load:
+    test_img_dir: 'dataset/hoadon_ocr'
+    test_label_dir: 'dataset/hoadon_ocr/test.txt'
+    batch_size: 16
+    num_workers: 4
+  preprocess:
+    case_sensitive: True
+    to_gray: False
+    transform: ultocr.loader.recognition.reg_loader,Resize
+  vocab: 'dataset/vocab/keysVN.txt'
+  function: ultocr.loader.recognition.reg_loader,RegLoader
+
+model:
+  gcb:
+    in_channels: 3
+    ratio: 0.0625
+    headers: 1
+    pooling_type: 'att'
+    att_scale: True
+    fusion_type: 'channel_concat'
+  backbone:
+    use_gcb: [False, True, True, True]
+  common:
+    with_encoder: False
+    d_model: 512
+    nhead: 8
+  encoder:
+    num_layer: 3
+    dropout: 0.2
+    ff_dim: 2048
+    share_parameter: False
+  decoder:
+    num_layer: 3
+    dropout: 0.2
+    ff_dim: 2048
+    share_parameter: False
+  function: ultocr.model.recognition.master,MASTER
+
+functional:
+  load_data: ultocr.loader.reg_loader,TextDataset
+  conv_embedding_gc: ultocr.model.common.resnet_master,ConvEmbeddingGC
+  embedding: ultocr.model.common.transformer,Embeddings
+  multi_head_attention: ultocr.model.common.transformer,MultiHeadAttention
+  feed_forward: ultocr.model.common.transformer,FeedForward
+  position: ultocr.model.common.transformer,PositionalEncoding
+  generator: ultocr.model.recognition.master,Generator
+
+loss:
+  function: ultocr.model.loss,CELoss
+
+optimizer:
+  type: 'Adam'
+  base_lr: 0.0001
+  function: ultocr.model.lr_scheduler,AdamDecay
+
+scheduler:
+  type: 'StepLR'
+  step_size: 30
+  gamma: 0.1
+
+post_process:
+  max_len: 100
+  function: ultocr.model.recognition.postprocess,MASTERpostprocess
+
+trainer:
+  epochs: 33
+  do_validation: True
+  validation_epoch: 1
+  log_step_interval: 200
+  val_step_interval: 2000
+  save_dir: 'saved'
+  monitor: 'max_word_acc'
+  distributed: True
+  local_world_size: 4
+  local_rank: -1
+  global_rank: -1
+  early_stop: 10
+  resume: True
+  ckpt_file: 'saved/master_pretrained.pth'
+

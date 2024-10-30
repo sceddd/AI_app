@@ -3,14 +3,6 @@ import numpy as np
 from torchvision import transforms
 from torch.nn.functional import interpolate
 from .lfw_eval import get_similarity_transform_for_cv2
-from .project_utils import cv2pillow
-
-
-def process(data):
-    img, landmark = data
-    alg_img = alignment(img, landmark)
-    pillow_fimg = cv2pillow(alg_img)
-    return pillow_fimg, landmark
 
 
 def cal_wh(box):
@@ -82,16 +74,12 @@ def compose_transforms(meta, resize=256, center_crop=True,
     return transforms.Compose(transform_list)
 
 
-def alignment(src_img,src_pts):
-    ref_pts = [[30.2946, 51.6963], [65.5318, 51.5014],
-               [48.0252, 71.7366], [33.5493, 92.3655], [62.7299, 92.2041]]
-    crop_size = (96, 112)
-
+def alignment(src_img,src_pts,**kwargs):
     s = np.array(src_pts).astype(np.float32)
-    r = np.array(ref_pts).astype(np.float32)
+    r = np.array(kwargs.get('ref_pts')).astype(np.float32)
 
     tfm = get_similarity_transform_for_cv2(s, r)
-    face_img = cv2.warpAffine(src_img, tfm, crop_size)
+    face_img = cv2.warpAffine(src_img, tfm, kwargs.get('crop_size', (96, 112)))
     return face_img
 
 

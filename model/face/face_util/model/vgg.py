@@ -1,5 +1,8 @@
 import torch
 import torch.nn as nn
+import sys
+
+from torch.cuda import device
 
 
 class Vgg_face_dag(nn.Module):
@@ -96,8 +99,21 @@ def vgg_face_dag(cfg=None):
         weights_path (str): If set, loads model weights from the given path
     """
     model = Vgg_face_dag()
+
+
     weights_path = cfg['weight_path']
     if weights_path:
         state_dict = torch.load(weights_path)
         model.load_state_dict(state_dict)
     return model
+
+if __name__ == '__main__':
+    sys.path.append("../")
+    from project_utils import read_config
+    from torchsummary import summary
+    cfg = read_config("../configs/recognition_model.yaml")
+    cfg['VGGFace']['weight_path'] = '/home/victor-ho/work/school/final/backend/WODex/model/face/weights/vgg_face_dag.pth'
+    model = vgg_face_dag(cfg['VGGFace'])
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model.to(device)
+    summary(model, input_size=(3, 224, 224))
