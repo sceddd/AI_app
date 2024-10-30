@@ -5,7 +5,7 @@ import os
 import zipfile
 from datetime import timedelta
 from pathlib import Path
-
+import shutil
 import lmdb
 from celery import shared_task, chain
 from django.conf import settings
@@ -52,12 +52,13 @@ def update_status():
 
 @shared_task(queue='image_processing')
 def process_batch(indices, function_type='face'):
+    logger.info(function_type)
     logger.info(f"Processing batch of {len(indices)} images for {function_type}")
     if function_type.startswith('face'):
         return face_recognition_process.apply_async(args=[indices], queue='image_processing')
     elif function_type.startswith('ocr'):
         return ocr_process.apply_async(args=[indices], queue='image_processing')
-    elif function_type.startswith('ob_det'):
+    elif function_type.startswith('det'):
         pass
     return ValueError(f"Unknown function type: {function_type}")
 
@@ -74,9 +75,9 @@ def write_cache(cache, user_id):
     return True
 
 
-@shared_task(bind=True, queue='image_processing')
+@shared_task(queue='image_processing')
 def process_ob_det(indices, input_words):
-    return det_process.apply_async(args=[indices, input_words], queue='image_processing')
+    return det_process(indices, input_words)
 
 
 @shared_task(queue='write_cache_and_process')
@@ -94,10 +95,26 @@ def write_cache_and_process(cache, user_id):
     return list(cache.keys())
 
 
+def compact_lmdb_with_rename(old_path, new_path, map_size):
+    logger.info(f"Compacting lmdb from {old_path} to {new_path}")
+    old_env = lmdb.open(old_path, readonly=True)
+
+    new_env = lmdb.open(new_path, map_size=map_size)
+
+    with old_env.begin() as old_txn, new_env.begin(write=True) as new_txn:
+        for key, value in old_txn.cursor():
+            new_txn.put(key, value)
+
+    old_env.close()
+    new_env.close()
+    shutil.rmtree(old_path)
+
+    os.rename(new_path, old_path)
+
+
 @shared_task(bind=True, queue='image_upload')
 def process_zip_file_lmdb(self, zip_key, user_id):
     user = CustomUser.objects.get(pk=user_id)
-
     zip_env = lmdb.open(settings.ZIP_PATH)
     try:
         with zip_env.begin(write=True) as txn:
@@ -113,25 +130,25 @@ def process_zip_file_lmdb(self, zip_key, user_id):
                 elif len(archive.namelist()) == 0:
                     return {'status': 'failure', 'error': 'No file found'}
 
-                images = [file for file in archive.namelist() if file.endswith(('.png', '.jpg', '.jpeg'))]
                 all_img_ids = []
-                logger.info(f"Found {len(images)} images in zip file.")
+                images = [file for file in archive.namelist() if file.endswith(('.png', '.jpg', '.jpeg'))]
                 for file_chunk in chunked_iterable(images, 10):
                     cache = {}
                     for image_name in file_chunk:
+                        logger.info(photo_type)
                         photo_class = get_photo(photo_type)
-                        logger.info(photo_class)
-                        logger.info(image_name)
-                        if FacePhoto.objects.filter(image_id=image_name).count()>0:
+
+                        if photo_class.objects.filter(image_id=image_name).count() > 0:
                             logger.info(f"Image {image_name} already exists, skipping...")
                             continue
+
                         logger.info(f"Processing image {image_name}")
+
                         photo = photo_class(image_id=image_name, status=AbstractPhoto.Status.UPLOADED)
                         photo.save()
-
-                        # logger.info(photo_class.objects.filter(image_id=image_name).first().to_dict())
                         with archive.open(image_name) as image_file:
                             image_data = image_file.read()
+
                         cache[image_name] = image_data
                         chain(
                             write_cache_and_process.s(cache,user_id) |
@@ -139,20 +156,21 @@ def process_zip_file_lmdb(self, zip_key, user_id):
                         ).apply_async()
 
                     all_img_ids.extend(cache.keys())
-                    logger.info(f"Processed {len(all_img_ids)} images.")
-
                 user.image_add(images=all_img_ids, photo_type=photo_type)
-            txn.delete(zip_key.encode('utf-8'))
             logger.info(f"Zip file processed successfully for key {zip_key}")
-        return {'task_id': self.request.id,'status': 'success'}
+            return {'task_id': self.request.id, 'status': 'success'}
     except zipfile.BadZipFile:
         logger.error(f"Error: Bad Zip file for key {zip_key}")
-        txn.delete(zip_key.encode('utf-8'))
         return {'status': 'failure', 'error': 'Bad Zip file'}
     except Exception as e:
         logger.error(f"Error: {str(e)}")
         push_failed_task_id_to_ssd(self.request.id, zip_key=zip_key, user_id=user_id, error=str(e))
-        return {'status': 'failure', 'error': str(e)}
+        return {'status': 'failure'}
+    finally:
+        txn.delete(zip_key.encode('utf-8'))
+        compact_lmdb_with_rename(str(settings.ZIP_PATH), str(settings.ZIP_PATH) + "_temp",
+                                 map_size=lmdb_limit * 2)
+        zip_env.close()
 
 
 def find_similar(faces_embed, photo_embed, k):
@@ -172,7 +190,10 @@ def restart_failed_tasks():
         for task_id, task_info in cursor:
             task_id = task_id.decode('utf-8')
             task_info = json.loads(task_info.decode('utf-8'))
-            #TODO: Add more error handling
+            if task_info.get('status', '') != 'failure':
+                continue
+
+            # if task_info.get('error', '').startswith('upload'):
             error_message = task_info.get('error', '')
             if error_message.startswith('upload'):
                 # TODO: process zip file

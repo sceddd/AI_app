@@ -42,7 +42,7 @@ class FaceRecognitionHandler(BaseHandler):
 
         model_dir = context.system_properties.get('model_dir')
         unzip_file(model_dir)
-        from util.inference import FaceRecognition
+        from face_util.inference import FaceRecognition
         recog_config = os.path.join(model_dir, 'util', 'configs','recognition_model.yaml')
 
         with open(recog_config, 'r') as file:

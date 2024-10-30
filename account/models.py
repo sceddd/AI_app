@@ -26,7 +26,8 @@ class CustomUserManager(BaseUserManager):
 
 
 class CustomUser(AbstractBaseUser, PermissionsMixin):
-    id = models.ObjectIdField(primary_key=True)
+    # id = models.ObjectIdField(primary_key=True)
+
     email = models.EmailField(_('email address'), unique=True)
     is_staff = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)

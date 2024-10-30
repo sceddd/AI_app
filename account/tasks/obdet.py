@@ -1,24 +1,25 @@
 import json
 import logging
 
-from celery import shared_task
-from celery.worker.state import requests
 from django.shortcuts import get_object_or_404
+import requests
 
 from AI_Backend import settings
-from account.app_models.photos import ObjectDetPhoto, AbstractPhoto
-from ..project_utils.utils import push_failed_task_id_to_ssd
+from account.app_models.photos import ObjectDetPhoto, AbstractPhoto, BoundingBox
+
 
 logger = logging.getLogger(__name__)
 
 
-@shared_task(bind=True, queue='image_processing')
-def det_process(self, indices,input_words):
+def det_process(indices,input_words):
     err = []
-    task_id = self.request.id
+    user_id = indices[0].split('_')[0]
+    input_words = input_words.split(',')
 
     logger.info(f"Processing images {indices}")
-    od_payload = json.dumps({'idx': indices, 'lmdb_path': settings.LMDB_PATH, "input_txt": input_words})
+    logger.info(f"input_words: {input_words}")
+    od_payload = json.dumps({'idx': [indices], 'input_txt': input_words,
+                             'lmdb_path': settings.LMDB_PATH + f"/user/{user_id}"})
 
     try:
         det_response = requests.post(settings.TORCHSERVE_URI_OD, headers={'Content-Type': 'application/json'},
@@ -26,25 +27,42 @@ def det_process(self, indices,input_words):
         det_response.raise_for_status()
         det_response = det_response.json()
         logger.info(f"OD response: {det_response}")
+        idx = det_response.get('idx')
+        photo = get_object_or_404(ObjectDetPhoto, image_id=idx)
 
-        [process_od_image(od_data, err) for od_data in det_response]
+        process_od_image(idx,photo,det_response, err)
 
     except requests.exceptions.RequestException as e:
         error_message = f'ob_det_ODFailed:{e}'
-        push_failed_task_id_to_ssd(task_id, indices=indices, error=error_message)
-        logger.error(f"Task {task_id} failed: {error_message}")
         return {'status': 'failure', 'error':error_message}
-    return {'status': 'success', 'error': err}
+    return photo.to_dict()
 
 
-def process_od_image(od_data, err):
-    idx = od_data.get('idx')
+def process_od_image(idx, photo, od_data, err):
+    logger.info(f"Processing OD image: {idx}")
     try:
-        photo = get_object_or_404(ObjectDetPhoto, image_id=idx)
-        photo.bounding_boxes = od_data.get('boxes', []) if od_data.get('boxes') else []
-        photo.objects_det = od_data.get('objects', []) if od_data.get('objects') else []
+
+        objects = od_data['objects'][0]
+        logger.info(objects)
+        logger.info(f"Deleting existing bounding boxes for image {idx}")
+        if hasattr(photo, 'bounding_boxes') and isinstance(photo.bounding_boxes, list):
+            photo.bounding_boxes = []  # Clear the list
+            logger.info("Existing bounding boxes cleared.")
+        else:
+            logger.warning("photo.bounding_boxes is not a list. Skipping deletion.")
+
+        logger.info(f"Detected {len(objects.get('boxes', []))} objects")
+
+        for idx in range(len(objects['boxes'])):
+            data = {
+                'bboxes': objects['boxes'][idx],
+                'conf': objects['conf'][idx],
+                'cls': objects['classes'][idx]
+            }
+
+            photo.add_bounding_box(BoundingBox(**data))
         photo.status = AbstractPhoto.Status.RESULT_SAVED
         photo.save()
-        logger.info(f"Image {photo} processed successfully.")
+
     except Exception as e:
         err.append(f"Error processing image {idx}: {e}")

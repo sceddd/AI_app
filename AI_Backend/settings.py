@@ -211,11 +211,11 @@ os.makedirs(BEAT_LOG,exist_ok=True)
 # LMDB settings
 
 LMDB_PATH = os.path.join(BASE_DIR, 'lmdb')
-LMDB_BATCH_SIZE = 100
+LMDB_BATCH_SIZE = 200
 LMDB_PATH_FACE = os.path.join(LMDB_PATH,'face', 'det')
 LMDB_PATH_FTASK = os.path.join(LMDB_PATH,'failed_task')
 LMDB_PATH_RESULT = os.path.join(LMDB_PATH,'result')
-LMDB_LIMIT = 1024 * 1024 * 1
+LMDB_LIMIT = 1024 * 1024 * 1024
 ZIP_PATH = os.path.join(LMDB_PATH,"zip")
 os.makedirs(ZIP_PATH,exist_ok=True)
 os.makedirs(LMDB_PATH_RESULT, exist_ok=True)
@@ -251,14 +251,15 @@ class SpecificTextFilter(logging.Filter):
 
 
 DR_CFG = {
-        'param': {
-            'n_neighbors': 20,
-            'min_dist': 0.2,
-            'n_components': 3,
-            'metric': 'euclidean'
-        },
-        'function': 'umap, UMAP'
-    }
+    'param': {
+        'n_neighbors': 20,
+        'min_dist': 0.2,
+        'n_components': 3,
+        'metric': 'euclidean'
+    },
+    'function': 'umap, UMAP'
+}
+
 CL_CFG = {
     'param': {
         'eps': 0.5,
@@ -267,6 +268,7 @@ CL_CFG = {
     },
     'function': 'sklearn.cluster, DBSCAN'
 }
+
 MODEL_STORE = os.path.join(BASE_DIR, 'model','model_store')
 os.makedirs(MODEL_STORE,exist_ok=True)
 current_command = sys.argv[1] if len(sys.argv) > 1 else None
@@ -277,8 +279,10 @@ CLUSTER_MODEL = None if current_command == 'download_weight' else DimReductionAn
 YOLOV8_WEIGHT_PATH = os.path.join(BASE_DIR,'model','object_detection','weights', 'yolov8n.pt')
 YOLOW_WEIGHT_PATH = os.path.join(BASE_DIR,'model','object_detection','weights','yolov8s-world.pt')
 VGG = os.path.join(BASE_DIR,'model','face','weights','vgg_face_dag.pth')
+MASTER_WEIGHT_PATH = os.path.join(BASE_DIR,'model','ocr','weights','master.pth')
+DBNET_WEIGHT_PATH = os.path.join(BASE_DIR,'model','ocr','weights','db.pth')
 
-paths_to_check = [UMAP_WEIGHT_PATH, YOLOV8_WEIGHT_PATH, YOLOW_WEIGHT_PATH, VGG]
+paths_to_check = [UMAP_WEIGHT_PATH, YOLOV8_WEIGHT_PATH, YOLOW_WEIGHT_PATH, VGG,MASTER_WEIGHT_PATH,DBNET_WEIGHT_PATH]
 missing_paths = [path for path in paths_to_check if not os.path.exists(path)]
 
 if missing_paths:
@@ -291,6 +295,7 @@ else:
 
 os.makedirs(os.path.join(BASE_DIR,'model','object_detection','weights'),exist_ok=True)
 os.makedirs(os.path.join(BASE_DIR,'model','face','weights'),exist_ok=True)
+os.makedirs(os.path.join(BASE_DIR,'model','ocr','weights'),exist_ok=True)
 
 LOG_DIR = os.path.join(BASE_DIR, 'logs')
 os.makedirs(LOG_DIR, exist_ok=True)

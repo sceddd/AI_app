@@ -34,11 +34,13 @@ def user_photos(request):
         user = request.user
         photos_id = user.get_image(photo_type)
         photo_class = get_photo(photo_type)
-        photos = photo_class.objects.filter(image_id__in=photos_id)
+        photos = photo_class.objects.filter(image_id__in=photos_id).values()
         result = []
+
         for photo in photos:
             try:
-                result.append(photo.to_dict())
+                print(photos)
+                result.append(photo)
             except Exception as e:
                 logger.error(f"Error retrieving photo {photo.image_id}, error: {e}")
         return JsonResponse({'photos':result}, status=200)
@@ -48,12 +50,11 @@ def user_photos(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def check_task_status(request, task_id):
-    print('GET: account/task_status')
-    print('received task_id:', task_id)
     task_result = AsyncResult(task_id)
     if task_result.state == 'PENDING':
         return JsonResponse({'state': task_result.state}, status=202)
     elif task_result.state == 'SUCCESS':
+        print(task_result.result)
         return JsonResponse({'state': task_result.state, 'result': task_result.result}, status=200)
     elif task_result.state == 'FAILURE':
         return JsonResponse({'state': task_result.state, 'error': str(task_result.info)}, status=500)
@@ -61,77 +62,58 @@ def check_task_status(request, task_id):
         return JsonResponse({'state': task_result.state}, status=202)
 
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-@csrf_exempt
-def get_similar_faces(request):
-    print('POST: account/get_similar_faces')
-    photo_check = request.POST.get('type', '').lower() == 'face'
-    if not photo_check:
-        return JsonResponse({'error': 'Invalid photo type'}, status=400)
-    user = request.user
-
-    k_faces = request.POST.get('k', 4)
-    photo_id = request.POST.get('photo_id', '')
-
-    if k_faces <= 0:
+def get_similar_faces(user,photo_id,k_faces=4):
+    print(f'k_faces: {k_faces}, photo_id: {photo_id}')
+    if k_faces < 1:
         return JsonResponse({'error': 'Invalid value for k'}, status=400)
     if not photo_id:
         return JsonResponse({'error': 'photo_id is required'}, status=400)
-    response = []
     list_photos = set(user.get_image('face'))
     if photo_id in list_photos:
         list_photos.remove(photo_id)
     photo_class = get_photo('face')
     photos = photo_class.objects.filter(image_id__in=list_photos)
-    faces_dict = {photo.image_id: photo.to_dict().get('faces') for photo in photos if photo.faces}
-    try:
-        photo_faces = get_object_or_404(photo_class,image_id=photo_id)
-        if photo_faces.to_dict().get('status') != 3:
-            return JsonResponse({'error': 'Photo not processed yet'}, status=400)
 
+    try:
+        faces_dict = {photo.image_id: photo.to_dict()['faces'] for photo in photos if photo.faces}
+        photo_faces = get_object_or_404(photo_class,image_id=photo_id)
+        if photo_faces['status'] != 3:
+            return JsonResponse({'error': 'Photo not processed yet'}, status=400)
         result = photo_faces.to_dict()
-        for idx, face in enumerate(result['faces']):
+        result['output'] = []
+        for face_idx, face in enumerate(result['faces']):
             if 'embedding' not in face:
                 continue
-            temp = f"0,{idx},1,{photo_id}"
-            result['output'] = [temp]
             similar_faces = find_similar(faces_dict, face, k_faces)
-            f_id = 1
-            for face_data in similar_faces['k_faces']:
+            temp = f"0,0.00,{photo_id},{face_idx}"
+            result['output'].append(temp)
+            for f_id, face_data in enumerate(similar_faces['k_faces']):
                 img_id = face_data['image_id']
                 distance = face_data['distance']
                 similar_photo = photo_class.objects.filter(image_id=img_id)
                 result['bounding_boxes'].extend(similar_photo[0].to_dict().get('bounding_boxes'))
-                temp = f"{f_id},{distance:.2f},{img_id}"
-                f_id += 1
+                temp = f"{f_id+1},{distance:.2f},{img_id},{face_idx}"
                 result['output'].append(temp)
-        response.append(result)
+                print(result)
+        if 'faces' in result:
+            del result['faces']
     except photo_class.DoesNotExist:
         return JsonResponse({'error': 'Photo not found'}, status=404)
     except IndexError:
         return JsonResponse({'error': 'No face detected in this photo'}, status=400)
-    return JsonResponse({'results':result}, status=202)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+    return JsonResponse(result, status=202)
 
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-@csrf_exempt
-def predict_objects(request):
-    print('POST: account/predict_objects')
-    photo_check = request.POST.get('type', '').lower() == 'ob_det'
-    if not photo_check:
-        return JsonResponse({'error': 'Invalid photo type'}, status=400)
-    user = request.user
-    photo_id = request.POST.get('photo_id', '')
+def predict_objects(photo_id, input_words):
+    print('GET: account/predict_objects')
+
     photo_class = get_photo('ob_det')
-    input_words = request.POST.get('input_words', '')
-
     if not input_words:
         return JsonResponse({'error': 'input_words is required'}, status=400)
     try:
-        photo = get_object_or_404(photo_class, image_id=photo_id)
-        task = process_ob_det.apply_async(args=[photo_id,input_words],queue="image_processing")
+        task = process_ob_det.apply_async(args=[photo_id,input_words])
     except photo_class.DoesNotExist:
         return JsonResponse({'error': 'Photo not found'}, status=404)
     return JsonResponse({'task_id': task.id}, status=202)
@@ -141,29 +123,43 @@ def predict_objects(request):
 @permission_classes([IsAuthenticated])
 @csrf_exempt
 def upload(request):
-    print('POST: account/upload')
+    logger.info('POST: account/upload')
+
     if request.method == 'POST' and 'file' in request.FILES:
         user = request.user
         file = request.FILES.get('file')
         photo_type = request.POST.get('type', '').lower()
-        if not photo_type or photo_type not in ['face', 'ocr', 'ob_det']:
+
+        if photo_type not in ['face', 'ocr', 'ob_det']:
             return JsonResponse({'error': 'Invalid photo type'}, status=400)
 
-        if not file.name.endswith('.zip'):
+        if not file.name.lower().endswith('.zip'):
             return JsonResponse({'error': 'Only .zip files are allowed'}, status=400)
 
         zip_key = f'zip_{uuid.uuid4()}_t_{photo_type}'
 
-        lmdb_env = lmdb.open(str(settings.ZIP_PATH), map_size=settings.LMDB_LIMIT * settings.LMDB_BATCH_SIZE)
+        lmdb_env = lmdb.open(
+            str(settings.ZIP_PATH),
+            map_size=settings.LMDB_LIMIT * settings.LMDB_BATCH_SIZE,
+            max_dbs=0
+        )
+        try:
+            with lmdb_env.begin(write=True) as txn:
+                zip_data = file.read()
+                txn.put(zip_key.encode('utf-8'), zip_data)
+                logger.info(f"Stored zip file with key {zip_key} in LMDB.")
+        except Exception as e:
+            logger.error(f"Failed to store zip file in LMDB: {e}")
+            return JsonResponse({'error': 'Failed to store zip file'}, status=500)
+        finally:
+            lmdb_env.close()
 
-        with lmdb_env.begin(write=True) as txn:
-            zip_data = b''.join(chunk for chunk in file.chunks())
-            txn.put(zip_key.encode('utf-8'), zip_data)
-
-        task = process_zip_file_lmdb.apply_async(args=[zip_key, user.id],queue="image_upload")
-        print(f"Task ID: {task.id}")
+        # Enqueue the processing task
+        task = process_zip_file_lmdb.apply_async(args=[zip_key, user.id], queue="image_upload")
+        logger.info(f"Enqueued task {task.id} for zip key {zip_key}.")
         return JsonResponse({'task_id': task.id}, status=202)
 
+    logger.warning('No zip file found in the request.')
     return JsonResponse({'error': 'No zip file found'}, status=400)
 
 
@@ -176,12 +172,13 @@ def login_user(request):
             username = form.cleaned_data['username']
             password = form.cleaned_data['password']
             user = authenticate(username=username, password=password)
+            print(user)
             if user is not None:
                 login(request, user)
                 tokens = get_tokens_for_user(user)
 
                 # Retrieve the user id (which is the ObjectId in MongoDB)
-                user_id = user.pk  # Access the MongoDB _id via the Django 'pk' attribute
+                user_id = str(user.pk)  # Access the MongoDB _id via the Django 'pk' attribute
 
                 return JsonResponse({
                     "message": "User logged in successfully",
@@ -204,8 +201,12 @@ def register_user(request):
             form = CustomUserCreationForm(request.POST)
             if form.is_valid():
                 user = form.save()
+                user_id = str(user.pk)  # Access the MongoDB _id via the Django 'pk' attribute
+                print(f"User ID: {user_id}")
                 return JsonResponse({"message": "User created successfully", "token":
-                                     get_tokens_for_user(user)}, status=201)
+                                     get_tokens_for_user(user),
+                                     "user_id": user_id  # Return the ObjectId (user id) here
+                                     }, status=201)
             else:
                 return JsonResponse({"errors": form.errors}, status=400)
         except DatabaseError as e:
@@ -224,11 +225,23 @@ def get_tokens_for_user(user):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_image(request):
+    print(f"GET parameters: {request.GET}")
     try:
         print('GET: account/get_image')
-        photo_type = get_photo(request.GET.get('type', '').lower())
-        image_id = request.GET.get('id', '')
-        photo = get_object_or_404(photo_type, image_id=image_id)
+        photo_type = request.GET.get('type', '').lower()
+        print(photo_type)
+        id = request.GET.get('id', '')
+        photo_class = get_photo(photo_type)
+
+        if photo_type == "face":
+            return get_similar_faces(user=request.user,photo_id=id)
+
+        if photo_type == "ob_det":
+            input_words = request.GET.get('input_words', '')
+            print(input_words)
+            return predict_objects(photo_id=id, input_words=request.GET.get('input_words', ''))
+
+        photo = get_object_or_404(photo_class, image_id=id)
         image_data = photo.to_dict()
         return JsonResponse(image_data)
 

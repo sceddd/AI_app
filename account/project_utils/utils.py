@@ -32,6 +32,6 @@ def get_data(idx):
 
 
 def get_photo(photo_type):
-    if photo_type not in ['face', 'ocr', 'ob_det']:
+    if photo_type not in ['face', 'ocr', 'ob_det','det']:
         return JsonResponse({'error': 'Invalid photo type'}, status=400)
     return get_photo_class(photo_type)

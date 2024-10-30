@@ -35,18 +35,14 @@ def clean_json_dict(data):
 
         for obj in objects_list:
             obj['conf'] = [f"{float(conf):.2f}" for conf in obj['conf']]
-
-            obj['class_ids'] = [int(class_id) for class_id in obj['class_ids']]
-
+            obj['boxes'] = [[int(value) for value in box] for box in obj['boxes']]
         data['objects'] = objects_list
-    data['boxes'] = [[[int(value) for value in box] for box in box_list] for box_list in data['boxes']]
     return data
 
 
-class OCRHandler(BaseHandler):
+class OBDetHandler(BaseHandler):
     def initialize(self, context):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        # self.model = YOLO("yolov8n.pt")
         self.model = YOLO("yolov8s-world.pt")
 
     def preprocess(self, data):
@@ -55,7 +51,9 @@ class OCRHandler(BaseHandler):
             payload = request
         else:
             payload = json.loads(request)
+        logging.info(f"Received payload: {payload}")
         input_txt = payload.get("input_txt", [])
+
         self.model.set_classes(input_txt)
         input_path = payload.get("lmdb_path", None)
         if input_path is None:
@@ -71,25 +69,22 @@ class OCRHandler(BaseHandler):
         with self.lmdb_env_read.begin(write=False) as txn:
             for idx in batch:
                 try:
-                    logging.info(f"Processing image {idx}")
                     image_data = txn.get(idx.encode('utf-8'))
                     image = Image.open(io.BytesIO(image_data))
                     if image.mode == 'RGBA':
                         image = image.convert('RGB')
-                    ob_dets = self.model.predict(image, conf=0.5)
-
+                    ob_dets = self.model.predict(image, conf=0.3)
                     objects = [{
                         'conf': ob_det.boxes.conf.tolist(),
-                        'class_ids': ob_det.boxes.cls.tolist(),
-                        'classes': [self.model.names[int(cls_id)] for cls_id in ob_det.boxes.cls.tolist()]
-                        }
+                        'classes': [self.model.names[int(cls_id)] for cls_id in ob_det.boxes.cls.tolist()],
+                        'boxes': ob_det.boxes.xyxy.tolist(),
+                    }
                         for ob_det in ob_dets
                     ]
 
                     json_object = json.dumps(objects, indent=4)
                     results.append({
                         'idx': idx,
-                        'boxes': [ob_det.boxes.xyxy for ob_det in ob_dets],
                         'objects': json_object
                     })
                 except Exception as e:
@@ -99,9 +94,10 @@ class OCRHandler(BaseHandler):
                         'boxes': None,
                         'objects': None
                     })
+        logging.info(f"Results: {results}")
         return results
 
     def postprocess(self, inference_output):
         inference_output = convert_to_serializable(inference_output)
         output = [clean_json_dict(f) for f in inference_output]
-        return [output]
+        return output

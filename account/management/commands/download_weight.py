@@ -10,20 +10,21 @@ class Command(BaseCommand):
 
     def handle(self, *args, **kwargs):
         os.makedirs(settings.UMAP_DIR, exist_ok=True)
-
         weights = [
             ('UMAP', '17gcURWEy1BrQkk_zqWGeBIdyOS1Shz_0', settings.UMAP_WEIGHT_PATH),
             ('YOLO-WORLD',
              'https://github.com/ultralytics/assets/releases/download/v8.2.0/yolov8s-world.pt',
              settings.YOLOW_WEIGHT_PATH),
-            ('YOLOV8', '1-weMXsdqjylVh7G5c9KfLSGsyVQN4h67', settings.YOLOV8_WEIGHT_PATH),
+            # ('YOLOV8', '1-weMXsdqjylVh7G5c9KfLSGsyVQN4h67', settings.YOLOV8_WEIGHT_PATH),
             ('VGGFACE', 'https://www.robots.ox.ac.uk/~albanie/models/pytorch-mcn/vgg_face_dag.pth',settings.VGG),
+            ('DB', '1KWKMiN5iRDtqb1l3FO3o1z6ThxLvfq9a', settings.DBNET_WEIGHT_PATH),
+            ('MASTER', '1V9CGvqC_SsXOEXiNGlRbZxp9fn0qH6Lf', settings.MASTER_WEIGHT_PATH),
         ]
 
         for name, url_or_id, path in weights:
-            self.download_weight_if_needed(name, url_or_id, path)
+            self.download_weight(name, url_or_id, path)
 
-    def download_weight_if_needed(self, name, url_or_id, path):
+    def download_weight(self, name, url_or_id, path):
         if not os.path.exists(path):
             self.stdout.write(self.style.NOTICE(f'Downloading {name} weights to {path}...'))
             download_weights(url_or_id, path)
